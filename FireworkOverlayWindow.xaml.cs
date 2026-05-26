@@ -34,11 +34,11 @@ public partial class FireworkOverlayWindow : Window
         new("blue", WpfColor.FromRgb(115, 176, 255), WpfColor.FromRgb(236, 244, 255)),
         new("violet", WpfColor.FromRgb(176, 140, 255), WpfColor.FromRgb(244, 239, 255))
     ];
-    private readonly BurstPalette[] _kanmuriPalettes =
+    private readonly BurstPalette[] _kamuroPalettes =
     [
-        new("kanmuri-gold", WpfColor.FromRgb(255, 198, 96), WpfColor.FromRgb(255, 244, 214)),
-        new("kanmuri-amber", WpfColor.FromRgb(255, 174, 86), WpfColor.FromRgb(255, 238, 201)),
-        new("kanmuri-deep", WpfColor.FromRgb(255, 152, 72), WpfColor.FromRgb(255, 228, 184))
+        new("kamuro-gold", WpfColor.FromRgb(255, 198, 96), WpfColor.FromRgb(255, 244, 214)),
+        new("kamuro-amber", WpfColor.FromRgb(255, 174, 86), WpfColor.FromRgb(255, 238, 201)),
+        new("kamuro-deep", WpfColor.FromRgb(255, 152, 72), WpfColor.FromRgb(255, 228, 184))
     ];
 
     private HanabiSettings _settings;
@@ -80,8 +80,8 @@ public partial class FireworkOverlayWindow : Window
         var arcPull = (localX - startX) * 1.8;
         var travel = Math.Max(launchY - localY, 120);
         _currentBurstKind = PickBurstKind();
-        _currentPalette = _currentBurstKind == BurstKind.KanmuriGiku
-            ? PickKanmuriPalette()
+        _currentPalette = _currentBurstKind == BurstKind.KamuroGiku
+            ? PickKamuroPalette()
             : PickBurstPalette();
 
         _rocket = new Rocket
@@ -208,32 +208,24 @@ public partial class FireworkOverlayWindow : Window
         var petalCount = Math.Max(_settings.ParticleCount * 2, 168);
         var outerRadius = _settings.ExplosionRadius * 1.18;
         var isBotan = _currentBurstKind == BurstKind.Botan;
-        var isKanmuri = _currentBurstKind == BurstKind.KanmuriGiku;
+        var isKamuro = _currentBurstKind == BurstKind.KamuroGiku;
 
         for (var i = 0; i < petalCount; i++)
         {
-            var angle = 2 * Math.PI * i / petalCount + (_random.NextDouble() - 0.5) * (isBotan ? 0.002 : isKanmuri ? 0.0015 : 0.003);
-            var zDirection = isBotan
-                ? (_random.NextDouble() * 2) - 1
-                : isKanmuri
-                    ? (_random.NextDouble() * 2) - 1
-                    : (_random.NextDouble() * 2) - 1;
-            var planarScale = Math.Sqrt(1 - Math.Min(zDirection * zDirection, 0.999));
-            var radialFactor = isBotan
-                ? 0.895 + Math.Pow(_random.NextDouble(), 0.82) * 0.155
-                : isKanmuri
-                    ? 0.93 + Math.Pow(_random.NextDouble(), 0.78) * 0.08
-                    : 0.9975 + _random.NextDouble() * 0.005;
-            var speed = outerRadius * (isKanmuri
-                ? (1.56 + _random.NextDouble() * 0.05) * radialFactor
+            var t = (i + 0.5) / petalCount;
+            var zDirection = 1 - (2 * t);
+            var phi = Math.Acos(Math.Clamp(zDirection, -1, 1));
+            var theta = Math.PI * (3 - Math.Sqrt(5)) * i;
+            var sinPhi = Math.Sin(phi);
+            var dirX = Math.Cos(theta) * sinPhi;
+            var dirY = Math.Sin(theta) * sinPhi;
+            var radialFactor = 1.0;
+            var speed = outerRadius * (isKamuro
+                ? (1.56 + _random.NextDouble() * 0.05) * radialFactor * 0.8
                 : isBotan
                 ? (1.82 + _random.NextDouble() * 0.025) * radialFactor
                 : 1.7866666666666666 + _random.NextDouble() * 0.025);
-            var petalJitter = isBotan
-                ? 0.99625 + _random.NextDouble() * 0.005
-                : isKanmuri
-                    ? 0.992 + _random.NextDouble() * 0.008
-                    : 0.9975 + _random.NextDouble() * 0.005;
+            var petalJitter = 1.0;
 
             _particles.Add(new Particle
             {
@@ -243,31 +235,31 @@ public partial class FireworkOverlayWindow : Window
                 BurstY = y,
                 Kind = _currentBurstKind,
                 Z = 0,
-                Vx = Math.Cos(angle) * speed * planarScale * petalJitter,
-                Vy = Math.Sin(angle) * speed * planarScale * petalJitter,
-                Vz = zDirection * speed * (isBotan ? 0.98 : isKanmuri ? 0.8 : 0.92),
+                Vx = dirX * speed * petalJitter,
+                Vy = dirY * speed * petalJitter,
+                Vz = zDirection * speed * (isBotan ? 0.98 : isKamuro ? 0.8 : 0.92),
                 Life = 1,
                 InitialLife = 1,
-                Decay = isKanmuri
-                    ? 0.46 + _random.NextDouble() * 0.12
+                Decay = isKamuro
+                    ? 0.24 + _random.NextDouble() * 0.08
                     : isBotan
                     ? 0.64 + _random.NextDouble() * 0.14
                     : 0.57 + _random.NextDouble() * 0.21,
-                Size = isKanmuri
+                Size = isKamuro
                     ? 3.2 + _random.NextDouble() * 1.8
                     : isBotan
                     ? 3.0 + _random.NextDouble() * 1.5
                     : 2.4 + _random.NextDouble() * 1.5,
                 StartColor = _currentPalette.Shell,
                 EndColor = _currentPalette.Outer,
-                TrailStrength = isKanmuri ? 7.6 : isBotan ? 0.8 : 1.45,
-                Drag = isKanmuri
+                TrailStrength = isKamuro ? 7.6 : isBotan ? 0.8 : 1.45,
+                Drag = isKamuro
                     ? 0.974 + _random.NextDouble() * 0.008
                     : isBotan
                     ? 0.958 + _random.NextDouble() * 0.008
                     : 0.968 + _random.NextDouble() * 0.008,
                 FlickerPhase = _random.NextDouble() * Math.PI * 2,
-                Twinkle = isKanmuri ? i % 7 == 0 : isBotan ? i % 14 == 0 : i % 9 == 0
+                Twinkle = isKamuro ? i % 7 == 0 : isBotan ? i % 14 == 0 : i % 9 == 0
             });
         }
     }
@@ -289,11 +281,11 @@ public partial class FireworkOverlayWindow : Window
             p.Life -= dt * p.Decay;
 
             var color = LerpColor(p.StartColor, p.EndColor, Math.Clamp(age * 1.08, 0, 1));
-            var trailLife = p.Kind == BurstKind.KanmuriGiku
-                ? p.Life * (0.3 + p.TrailStrength * 0.8)
+            var trailLife = p.Kind == BurstKind.KamuroGiku
+                ? p.Life * (0.3 + p.TrailStrength * 1.05)
                 : p.Life * (0.3 + p.TrailStrength * 0.2);
-            var trailSize = p.Kind == BurstKind.KanmuriGiku
-                ? p.Size * (0.42 + p.TrailStrength * 0.05)
+            var trailSize = p.Kind == BurstKind.KamuroGiku
+                ? p.Size * (0.30 + p.TrailStrength * 0.032)
                 : p.Size * (0.92 + p.TrailStrength * 0.14);
             _trails.Add(new TrailParticle(
                 p.X,
@@ -344,17 +336,21 @@ public partial class FireworkOverlayWindow : Window
             var projectedX = p.BurstX + ((p.X - p.BurstX) * perspective);
             var projectedY = p.BurstY + ((p.Y - p.BurstY) * perspective);
             var botanBloom = p.Kind == BurstKind.Botan ? GetBotanBloomFactor(age) : 1;
-            var kanmuriGlow = p.Kind == BurstKind.KanmuriGiku ? GetKanmuriGlowFactor(age) : 1;
-            var centerFade = p.Kind == BurstKind.KanmuriGiku ? GetKanmuriCenterFadeFactor(p) : 1;
+            var kamuroGlow = p.Kind == BurstKind.KamuroGiku ? GetKamuroGlowFactor(age) : 1;
+            var centerFade = p.Kind == BurstKind.KamuroGiku ? GetKamuroCenterFadeFactor(p, age) : 1;
+            var softFade = p.Kind == BurstKind.KamuroGiku ? GetKamuroSoftFade(age) : 1;
+            var lifeFactor = p.Kind == BurstKind.KamuroGiku
+                ? Math.Clamp((p.Life * 0.7) + (centerFade * 0.3), 0, 1)
+                : p.Life;
             _renderParticles.Add(new RenderParticle(
                 projectedX,
                 projectedY,
-                p.Size * (2.25 - age * 0.2) * kanmuriGlow,
-                p.Size * (0.92 - age * 0.05) * (0.92 + kanmuriGlow * 0.08),
+                p.Size * (2.25 - age * 0.2) * kamuroGlow,
+                p.Size * (0.92 - age * 0.05) * (0.92 + kamuroGlow * 0.08),
                 color,
                 LerpColor(p.StartColor, p.EndColor, 0.35 + age * 0.25),
-                p.Life * 0.11 * shimmer * botanBloom * kanmuriGlow * centerFade,
-                Math.Clamp(p.Life * 0.68 * shimmer * botanBloom * kanmuriGlow * centerFade, 0, 1)));
+                lifeFactor * 0.11 * shimmer * botanBloom * kamuroGlow * centerFade * softFade,
+                Math.Clamp(lifeFactor * 0.68 * shimmer * botanBloom * kamuroGlow * centerFade * softFade, 0, 1)));
         }
 
         _scene.UpdateScene(
@@ -388,7 +384,7 @@ public partial class FireworkOverlayWindow : Window
     }
 
     private BurstPalette PickBurstPalette() => _burstPalettes[_random.Next(_burstPalettes.Length)];
-    private BurstPalette PickKanmuriPalette() => _kanmuriPalettes[_random.Next(_kanmuriPalettes.Length)];
+    private BurstPalette PickKamuroPalette() => _kamuroPalettes[_random.Next(_kamuroPalettes.Length)];
 
     private BurstKind PickBurstKind() => (BurstKind)_random.Next(3);
 
@@ -433,7 +429,7 @@ public partial class FireworkOverlayWindow : Window
         return 0.24 + (0.94 * t * t * (3 - (2 * t)));
     }
 
-    private static double GetKanmuriGlowFactor(double age)
+    private static double GetKamuroGlowFactor(double age)
     {
         if (age <= 0.22)
         {
@@ -449,13 +445,33 @@ public partial class FireworkOverlayWindow : Window
         return 0.84 + (0.28 * t * t * (3 - (2 * t)));
     }
 
-    private static double GetKanmuriCenterFadeFactor(Particle p)
+    private static double GetKamuroCenterFadeFactor(Particle p, double age)
     {
         var dx = p.X - p.BurstX;
         var dy = p.Y - p.BurstY;
         var radial = Math.Sqrt((dx * dx) + (dy * dy) + (p.Z * p.Z));
-        var t = Math.Clamp(radial / 220, 0, 1);
-        return 0.22 + (0.78 * t);
+        var radialNorm = Math.Clamp(radial / 220, 0, 1);
+
+        // Center-out fade: center starts fading first, outer stars fade later.
+        var startAge = 0.12 + (radialNorm * 0.20);
+        var endAge = startAge + 0.18;
+        var fadeT = Math.Clamp((age - startAge) / Math.Max(endAge - startAge, 0.001), 0, 1);
+        var smooth = fadeT * fadeT * (3 - (2 * fadeT));
+        var fade = 1 - smooth;
+        var floor = radialNorm * 0.22;
+        return Math.Clamp(Math.Max(fade, floor), 0, 1);
+    }
+
+    private static double GetKamuroSoftFade(double age)
+    {
+        if (age <= 0.62)
+        {
+            return 1;
+        }
+
+        var t = Math.Clamp((age - 0.62) / 0.38, 0, 1);
+        var smooth = t * t * (3 - (2 * t));
+        return 1 - (smooth * 0.78);
     }
 
     private sealed record BurstPalette(string Name, WpfColor Outer, WpfColor Shell);
@@ -464,7 +480,7 @@ public partial class FireworkOverlayWindow : Window
     {
         Chrysanthemum,
         Botan,
-        KanmuriGiku
+        KamuroGiku
     }
 
     private sealed class Rocket
