@@ -8,5 +8,5 @@
         Topmost="True"
         ResizeMode="NoResize"
         IsHitTestVisible="False">
-    <Canvas x:Name="ParticleCanvas"/>
+    <Grid x:Name="RootHost"/>
 </Window>

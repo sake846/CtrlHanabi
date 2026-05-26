@@ -14,8 +14,10 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
     private readonly NativeMethods.LowLevelKeyboardProc _proc;
     private nint _hookId;
     private DateTime _lastCtrlDownUtc = DateTime.MinValue;
+    private int _ctrlTapCount;
 
     public event EventHandler? DoubleTapDetected;
+    public event EventHandler? FiveTapDetected;
 
     public KeyboardDoubleTapDetector(int thresholdMs)
     {
@@ -39,11 +41,27 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
                 var now = DateTime.UtcNow;
                 if ((now - _lastCtrlDownUtc).TotalMilliseconds <= _thresholdMs)
                 {
-                    DoubleTapDetected?.Invoke(this, EventArgs.Empty);
-                    _lastCtrlDownUtc = DateTime.MinValue;
+                    _ctrlTapCount++;
+
+                    if (_ctrlTapCount == 2)
+                    {
+                        DoubleTapDetected?.Invoke(this, EventArgs.Empty);
+                    }
+
+                    if (_ctrlTapCount >= 5)
+                    {
+                        FiveTapDetected?.Invoke(this, EventArgs.Empty);
+                        _ctrlTapCount = 0;
+                        _lastCtrlDownUtc = DateTime.MinValue;
+                    }
+                    else
+                    {
+                        _lastCtrlDownUtc = now;
+                    }
                 }
                 else
                 {
+                    _ctrlTapCount = 1;
                     _lastCtrlDownUtc = now;
                 }
             }

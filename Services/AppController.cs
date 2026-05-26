@@ -22,6 +22,7 @@ public sealed class AppController : IDisposable
         _overlay = new FireworkOverlayWindow(settings);
 
         _detector.DoubleTapDetected += OnDoubleTapDetected;
+        _detector.FiveTapDetected += OnFiveTapDetected;
 
         _notifyIcon = CreateNotifyIcon();
     }
@@ -47,6 +48,11 @@ public sealed class AppController : IDisposable
             var mouse = Cursor.Position;
             _overlay.ShowFirework(new System.Windows.Point(mouse.X, mouse.Y));
         });
+    }
+
+    private void OnFiveTapDetected(object? sender, EventArgs e)
+    {
+        WpfApplication.Current.Dispatcher.Invoke(RequestExit);
     }
 
     private NotifyIcon CreateNotifyIcon()
@@ -90,17 +96,30 @@ public sealed class AppController : IDisposable
         };
 
         var exitItem = new ToolStripMenuItem("終了");
-        exitItem.Click += (_, _) =>
-        {
-            _notifyIcon.Visible = false;
-            System.Windows.Application.Current.Shutdown();
-        };
+        exitItem.Click += (_, _) => WpfApplication.Current.Dispatcher.Invoke(RequestExit);
 
         menu.Items.Add(launchItem);
         menu.Items.Add(settingsItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exitItem);
         return menu;
+    }
+
+    private void RequestExit()
+    {
+        var result = System.Windows.MessageBox.Show(
+            "CtrlHanabiを終了しますか？",
+            "CtrlHanabi",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (result != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        _notifyIcon.Visible = false;
+        WpfApplication.Current.Shutdown();
     }
 
     public void Dispose()
