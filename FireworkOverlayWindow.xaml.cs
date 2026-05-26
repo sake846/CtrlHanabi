@@ -142,7 +142,6 @@ public partial class FireworkOverlayWindow : Window
         var progress = Math.Clamp((_rocket.OriginY - _rocket.Y) / totalRise, 0, 1);
         var gravity = 620 + (progress * 760);
         var sway = Math.Sin((progress * Math.PI * 1.4) + _rocket.SwayPhase) * (1 - progress) * 18;
-        var verticalStretch = Math.Clamp(Math.Abs(_rocket.Vy) / 900, 0.35, 1.4);
 
         _rocket.Vy += gravity * dt;
         _rocket.Vx = (_rocket.Vx * 0.952) + (sway * dt);
@@ -170,27 +169,6 @@ public partial class FireworkOverlayWindow : Window
             _rocket.FuseHidden = false;
         }
 
-        if (!_rocket.FuseHidden)
-        {
-            _trails.Add(new TrailParticle(
-                _rocket.X,
-                _rocket.Y,
-                0,
-                _rocket.X,
-                _rocket.Y,
-                0.96 - (progress * 0.26),
-                (5.6 + _random.NextDouble() * 1.8) * verticalStretch,
-                WithAlpha(_rocket.TrailColor, 185)));
-            _trails.Add(new TrailParticle(
-                _rocket.X + (_random.NextDouble() - 0.5) * 4,
-                _rocket.Y + 8 + _random.NextDouble() * (10 + (1 - progress) * 10),
-                0,
-                _rocket.X,
-                _rocket.Y,
-                0.68 - (progress * 0.18),
-                2.4 + _random.NextDouble() * verticalStretch,
-                WpfColor.FromRgb(255, 240, 210)));
-        }
 
         var shouldBurst = _rocket.BurstDelay >= FuseDelaySeconds;
         if (!shouldBurst)
@@ -473,6 +451,10 @@ public partial class FireworkOverlayWindow : Window
         var smooth = t * t * (3 - (2 * t));
         return 1 - (smooth * 0.78);
     }
+
+
+
+
 
     private sealed record BurstPalette(string Name, WpfColor Outer, WpfColor Shell);
 
