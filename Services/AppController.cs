@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Windows;
 using System.Windows.Forms;
 using CtrlHanabi.Models;
+using WpfApplication = System.Windows.Application;
 
 namespace CtrlHanabi.Services;
 
@@ -41,10 +42,10 @@ public sealed class AppController : IDisposable
 
         _lastTrigger = DateTime.UtcNow;
 
-        Application.Current.Dispatcher.Invoke(() =>
+        WpfApplication.Current.Dispatcher.Invoke(() =>
         {
             var mouse = Cursor.Position;
-            _overlay.ShowFirework(new Point(mouse.X, mouse.Y));
+            _overlay.ShowFirework(new System.Windows.Point(mouse.X, mouse.Y));
         });
     }
 

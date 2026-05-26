@@ -1,8 +1,13 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using CtrlHanabi.Models;
+using Microsoft.Win32;
+using WpfBrushes = System.Windows.Media.Brushes;
+using WpfColor = System.Windows.Media.Color;
+using WpfPoint = System.Windows.Point;
 
 namespace CtrlHanabi;
 
@@ -32,7 +37,7 @@ public partial class FireworkOverlayWindow : Window
         Hide();
     }
 
-    public void ShowFirework(Point screenPoint)
+    public void ShowFirework(WpfPoint screenPoint)
     {
         _settings = _settingsService.Load();
         ParticleCanvas.Children.Clear();
@@ -185,7 +190,7 @@ public partial class FireworkOverlayWindow : Window
         {
             Width = 5,
             Height = 5,
-            Fill = Brushes.Gold,
+            Fill = WpfBrushes.Gold,
             Opacity = 1
         };
         Canvas.SetLeft(rocketCore, _rocket.X - 2.5);
@@ -214,7 +219,7 @@ public partial class FireworkOverlayWindow : Window
             {
                 Width = p.Size,
                 Height = p.Size,
-                Fill = Brushes.White,
+                Fill = WpfBrushes.White,
                 Opacity = p.Life
             };
             Canvas.SetLeft(core, p.X - p.Size / 2);
@@ -256,22 +261,22 @@ public partial class FireworkOverlayWindow : Window
         base.OnClosed(e);
     }
 
-    private static Color FromHsv(double h, double s, double v)
+    private static WpfColor FromHsv(double h, double s, double v)
     {
         var c = v * s;
         var x = c * (1 - Math.Abs((h / 60) % 2 - 1));
         var m = v - c;
         (double r1, double g1, double b1) = h switch
         {
-            < 60 => (c, x, 0),
-            < 120 => (x, c, 0),
-            < 180 => (0, c, x),
-            < 240 => (0, x, c),
-            < 300 => (x, 0, c),
-            _ => (c, 0, x)
+            < 60 => (c, x, 0d),
+            < 120 => (x, c, 0d),
+            < 180 => (0d, c, x),
+            < 240 => (0d, x, c),
+            < 300 => (x, 0d, c),
+            _ => (c, 0d, x)
         };
 
-        return Color.FromRgb(
+        return WpfColor.FromRgb(
             (byte)Math.Round((r1 + m) * 255),
             (byte)Math.Round((g1 + m) * 255),
             (byte)Math.Round((b1 + m) * 255));
@@ -296,15 +301,15 @@ public partial class FireworkOverlayWindow : Window
         public double Life { get; set; }
         public double Decay { get; set; }
         public double Size { get; set; }
-        public Color Color { get; set; }
+        public WpfColor Color { get; set; }
     }
 
-    private sealed class TrailParticle(double x, double y, double life, double size, Color color)
+    private sealed class TrailParticle(double x, double y, double life, double size, WpfColor color)
     {
         public double X { get; set; } = x;
         public double Y { get; set; } = y;
         public double Life { get; set; } = life;
         public double Size { get; set; } = size;
-        public Color Color { get; set; } = color;
+        public WpfColor Color { get; set; } = color;
     }
 }

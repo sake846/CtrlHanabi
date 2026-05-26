@@ -1,9 +1,10 @@
+using WpfApplication = System.Windows.Application;
 using System.Windows;
 using CtrlHanabi.Services;
 
 namespace CtrlHanabi;
 
-public partial class App : Application
+public partial class App : WpfApplication
 {
     private AppController? _controller;
 
