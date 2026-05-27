@@ -48,6 +48,8 @@ public partial class FireworkOverlayWindow : Window
     private BurstPalette _currentPalette;
     private BurstKind _currentBurstKind;
     private CurveGuideType _currentCurveGuideType;
+    private BurstPalette _currentChrysanthemumCharcoalPalette;
+    private SilverDragonTone _currentSilverDragonTone;
 
     public FireworkOverlayWindow(HanabiSettings settings)
     {
@@ -55,6 +57,8 @@ public partial class FireworkOverlayWindow : Window
         _currentPalette = _burstPalettes[0];
         _currentBurstKind = BurstKind.Chrysanthemum;
         _currentCurveGuideType = CurveGuideType.None;
+        _currentChrysanthemumCharcoalPalette = _kamuroPalettes[0];
+        _currentSilverDragonTone = SilverDragonTone.Charcoal;
         InitializeComponent();
         RootHost.Children.Add(_scene);
 
@@ -83,6 +87,8 @@ public partial class FireworkOverlayWindow : Window
         var travel = Math.Max(launchY - localY, 120);
         _currentCurveGuideType = PickCurveGuideType();
         _currentBurstKind = PickBurstKind();
+        _currentChrysanthemumCharcoalPalette = _kamuroPalettes[_random.Next(_kamuroPalettes.Length)];
+        _currentSilverDragonTone = PickSilverDragonTone();
         _currentPalette = _currentBurstKind == BurstKind.KamuroGiku
             ? PickKamuroPalette()
             : PickBurstPalette();
@@ -104,7 +110,11 @@ public partial class FireworkOverlayWindow : Window
             FuseHidden = false,
             FuseStarted = false,
             TrailColor = _currentPalette.Outer,
-            CurveGuide = _currentCurveGuideType
+            CurveGuide = _currentCurveGuideType,
+            LastTrailEmitProgress = 0,
+            KobanaBurstCount = 0,
+            PrevX = startX,
+            PrevY = launchY
         };
 
         _isBursting = false;
@@ -119,6 +129,7 @@ public partial class FireworkOverlayWindow : Window
         if (!_isBursting)
         {
             UpdateRocket();
+            UpdateParticles();
             RenderFrame();
             return;
         }
@@ -151,6 +162,7 @@ public partial class FireworkOverlayWindow : Window
         _rocket.Vx = (_rocket.Vx * 0.952) + (sway * dt);
         _rocket.X += _rocket.Vx * dt;
         _rocket.Y += _rocket.Vy * dt;
+        EmitAscentEffect(_rocket, progress);
 
         var startedFalling = _rocket.Vy >= 0;
         var highEnough = _rocket.Y <= (_rocket.TargetY + 8);
@@ -192,8 +204,7 @@ public partial class FireworkOverlayWindow : Window
         var isChrysanthemum = _currentBurstKind == BurstKind.Chrysanthemum;
         var isBotan = _currentBurstKind == BurstKind.Botan;
         var isKamuro = _currentBurstKind == BurstKind.KamuroGiku;
-        var chrysanthemumCharcoalPalette = _kamuroPalettes[_random.Next(_kamuroPalettes.Length)];
-        var chrysanthemumTransitionColor = _burstPalettes[_random.Next(_burstPalettes.Length)].Outer;
+        var chrysanthemumTransitionColor = PickWeightedBurstPalette().Outer;
 
         for (var i = 0; i < petalCount; i++)
         {
@@ -235,8 +246,8 @@ public partial class FireworkOverlayWindow : Window
                     : isBotan
                     ? 3.0 + _random.NextDouble() * 1.5
                     : 2.4 + _random.NextDouble() * 1.5,
-                StartColor = isChrysanthemum ? chrysanthemumCharcoalPalette.Shell : _currentPalette.Shell,
-                EndColor = isChrysanthemum ? chrysanthemumCharcoalPalette.Outer : _currentPalette.Outer,
+                StartColor = isChrysanthemum ? _currentChrysanthemumCharcoalPalette.Shell : _currentPalette.Shell,
+                EndColor = isChrysanthemum ? _currentChrysanthemumCharcoalPalette.Outer : _currentPalette.Outer,
                 TransitionColor = isChrysanthemum
                     ? chrysanthemumTransitionColor
                     : _currentPalette.Outer,
@@ -371,8 +382,21 @@ public partial class FireworkOverlayWindow : Window
         base.OnClosed(e);
     }
 
-    private BurstPalette PickBurstPalette() => _burstPalettes[_random.Next(_burstPalettes.Length)];
+    private BurstPalette PickBurstPalette() => PickWeightedBurstPalette();
     private BurstPalette PickKamuroPalette() => _kamuroPalettes[_random.Next(_kamuroPalettes.Length)];
+
+    private BurstPalette PickWeightedBurstPalette()
+    {
+        // green/blue/violet: 20% each, others: 10% each
+        var roll = _random.NextDouble();
+        if (roll < 0.10) return _burstPalettes[0]; // red
+        if (roll < 0.20) return _burstPalettes[1]; // crimson
+        if (roll < 0.30) return _burstPalettes[2]; // yellow
+        if (roll < 0.40) return _burstPalettes[3]; // orange
+        if (roll < 0.60) return _burstPalettes[4]; // green
+        if (roll < 0.80) return _burstPalettes[5]; // blue
+        return _burstPalettes[6]; // violet
+    }
 
     private BurstKind PickBurstKind()
     {
@@ -390,7 +414,108 @@ public partial class FireworkOverlayWindow : Window
         return BurstKind.KamuroGiku;
     }
 
+    private void EmitAscentEffect(Rocket rocket, double progress)
+    {
+        if (rocket.CurveGuide == CurveGuideType.SilverDragon)
+        {
+            EmitSilverDragonTrail(rocket, progress);
+            return;
+        }
+
+        if (rocket.CurveGuide == CurveGuideType.Kobana)
+        {
+            EmitKobanaBursts(rocket, progress);
+        }
+    }
+
+    private void EmitSilverDragonTrail(Rocket rocket, double progress)
+    {
+        var heat = 1 - progress;
+        var charcoal = _currentSilverDragonTone == SilverDragonTone.Charcoal
+            ? _currentChrysanthemumCharcoalPalette.Shell
+            : WpfColor.FromRgb(196, 208, 220);
+        var ember = _currentSilverDragonTone == SilverDragonTone.Charcoal
+            ? _currentChrysanthemumCharcoalPalette.Outer
+            : WpfColor.FromRgb(244, 250, 255);
+        var body = LerpColor(charcoal, ember, 0.42 + (heat * 0.44) + (_random.NextDouble() * 0.08));
+        var dx = rocket.X - rocket.PrevX;
+        var dy = rocket.Y - rocket.PrevY;
+        var distance = Math.Sqrt((dx * dx) + (dy * dy));
+        var steps = Math.Max(1, (int)Math.Ceiling(distance / 2.8));
+        for (var i = 1; i <= steps; i++)
+        {
+            var t = i / (double)steps;
+            var px = rocket.PrevX + (dx * t);
+            var py = rocket.PrevY + (dy * t);
+            _trails.Add(new TrailParticle(
+                px + ((_random.NextDouble() - 0.5) * 1.2),
+                py + ((_random.NextDouble() - 0.5) * 1.6),
+                0,
+                px,
+                py,
+                1.05 + _random.NextDouble() * 0.5,
+                3.8 + _random.NextDouble() * 2.2,
+                WithAlpha(body, 198)));
+        }
+
+        rocket.PrevX = rocket.X;
+        rocket.PrevY = rocket.Y;
+        rocket.LastTrailEmitProgress = progress;
+    }
+
+    private void EmitKobanaBursts(Rocket rocket, double progress)
+    {
+        if (rocket.KobanaBurstCount >= 3)
+        {
+            return;
+        }
+
+        var thresholds = new[] { 0.50, 0.68, 0.82 };
+        if (progress < thresholds[rocket.KobanaBurstCount])
+        {
+            return;
+        }
+
+        SpawnKobanaBurst(rocket.X, rocket.Y);
+        rocket.KobanaBurstCount++;
+    }
+
+    private void SpawnKobanaBurst(double x, double y)
+    {
+        var petals = 12;
+        var color = _burstPalettes[_random.Next(_burstPalettes.Length)];
+        for (var i = 0; i < petals; i++)
+        {
+            var angle = (Math.PI * 2 * i) / petals;
+            var speed = 46 + _random.NextDouble() * 26;
+            _particles.Add(new Particle
+            {
+                X = x,
+                Y = y,
+                BurstX = x,
+                BurstY = y,
+                Kind = BurstKind.Botan,
+                Z = 0,
+                Vx = Math.Cos(angle) * speed,
+                Vy = Math.Sin(angle) * speed,
+                Vz = (_random.NextDouble() - 0.5) * 15,
+                Life = 1.0 + _random.NextDouble() * 0.25,
+                InitialLife = 1.0,
+                Decay = 0.9 + _random.NextDouble() * 0.25,
+                Size = 1.5 + _random.NextDouble() * 0.9,
+                StartColor = color.Shell,
+                EndColor = color.Outer,
+                TransitionColor = color.Outer,
+                TrailStrength = 0.42,
+                Drag = 0.935 + _random.NextDouble() * 0.02,
+                FlickerPhase = _random.NextDouble() * Math.PI * 2,
+                Twinkle = false
+            });
+        }
+    }
+
     private CurveGuideType PickCurveGuideType() => (CurveGuideType)_random.Next(3);
+    private SilverDragonTone PickSilverDragonTone() => _random.Next(2) == 0 ? SilverDragonTone.Charcoal : SilverDragonTone.Silver;
 
     private static WpfColor LerpColor(WpfColor from, WpfColor to, double t)
     {
@@ -518,6 +643,12 @@ public partial class FireworkOverlayWindow : Window
         Kobana
     }
 
+    private enum SilverDragonTone
+    {
+        Charcoal,
+        Silver
+    }
+
     private sealed class Rocket
     {
         public double X { get; set; }
@@ -536,6 +667,10 @@ public partial class FireworkOverlayWindow : Window
         public bool FuseStarted { get; set; }
         public WpfColor TrailColor { get; set; }
         public CurveGuideType CurveGuide { get; set; }
+        public double LastTrailEmitProgress { get; set; }
+        public int KobanaBurstCount { get; set; }
+        public double PrevX { get; set; }
+        public double PrevY { get; set; }
     }
 
     private sealed class Particle
