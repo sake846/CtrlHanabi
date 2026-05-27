@@ -61,8 +61,8 @@ internal sealed class ParticleSceneElement : FrameworkElement
             drawingContext.DrawRoundedRectangle(TubeBrush, null, new Rect(rocket.OriginX - 7, rocket.OriginY - 11, 14, 22), 3, 3);
             if (!rocket.FuseHidden)
             {
-                drawingContext.DrawEllipse(RocketDimGlowBrush, null, new WpfPoint(rocket.X, rocket.Y), 3.5, 3.5);
-                drawingContext.DrawEllipse(RocketDimCoreBrush, null, new WpfPoint(rocket.X, rocket.Y), 1.25, 1.25);
+                drawingContext.DrawEllipse(RocketDimGlowBrush, null, new WpfPoint(rocket.X, rocket.Y), 1.75, 1.75);
+                drawingContext.DrawEllipse(RocketDimCoreBrush, null, new WpfPoint(rocket.X, rocket.Y), 0.625, 0.625);
             }
         }
 

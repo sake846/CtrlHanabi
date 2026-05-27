@@ -26,19 +26,19 @@ public partial class FireworkOverlayWindow : Window
     private readonly ParticleSceneElement _scene = new();
     private readonly BurstPalette[] _burstPalettes =
     [
-        new("gold", WpfColor.FromRgb(255, 197, 106), WpfColor.FromRgb(255, 246, 220)),
-        new("amber", WpfColor.FromRgb(255, 156, 92), WpfColor.FromRgb(255, 244, 224)),
-        new("scarlet", WpfColor.FromRgb(255, 114, 98), WpfColor.FromRgb(255, 238, 232)),
-        new("rose", WpfColor.FromRgb(255, 132, 150), WpfColor.FromRgb(255, 240, 242)),
-        new("green", WpfColor.FromRgb(138, 212, 118), WpfColor.FromRgb(239, 249, 230)),
-        new("blue", WpfColor.FromRgb(115, 176, 255), WpfColor.FromRgb(236, 244, 255)),
-        new("violet", WpfColor.FromRgb(176, 140, 255), WpfColor.FromRgb(244, 239, 255))
+        new("strontium-red", WpfColor.FromRgb(246, 88, 76), WpfColor.FromRgb(255, 236, 232)),
+        new("lithium-crimson", WpfColor.FromRgb(236, 74, 98), WpfColor.FromRgb(255, 233, 242)),
+        new("sodium-yellow", WpfColor.FromRgb(255, 212, 94), WpfColor.FromRgb(255, 248, 216)),
+        new("calcium-orange", WpfColor.FromRgb(255, 162, 82), WpfColor.FromRgb(255, 239, 214)),
+        new("barium-green", WpfColor.FromRgb(126, 214, 108), WpfColor.FromRgb(233, 250, 224)),
+        new("copper-blue", WpfColor.FromRgb(92, 170, 255), WpfColor.FromRgb(229, 242, 255)),
+        new("potassium-violet", WpfColor.FromRgb(170, 136, 255), WpfColor.FromRgb(241, 236, 255))
     ];
     private readonly BurstPalette[] _kamuroPalettes =
     [
-        new("kamuro-gold", WpfColor.FromRgb(255, 198, 96), WpfColor.FromRgb(255, 244, 214)),
-        new("kamuro-amber", WpfColor.FromRgb(255, 174, 86), WpfColor.FromRgb(255, 238, 201)),
-        new("kamuro-deep", WpfColor.FromRgb(255, 152, 72), WpfColor.FromRgb(255, 228, 184))
+        new("kamuro-charcoal-bright", WpfColor.FromRgb(255, 200, 108), WpfColor.FromRgb(255, 244, 210)),
+        new("kamuro-charcoal-ember", WpfColor.FromRgb(255, 168, 92), WpfColor.FromRgb(255, 232, 192)),
+        new("kamuro-charcoal-deep", WpfColor.FromRgb(238, 132, 84), WpfColor.FromRgb(255, 214, 176))
     ];
 
     private HanabiSettings _settings;
@@ -189,8 +189,11 @@ public partial class FireworkOverlayWindow : Window
     {
         var petalCount = Math.Max(_settings.ParticleCount * 2, 168);
         var outerRadius = _settings.ExplosionRadius * 1.18;
+        var isChrysanthemum = _currentBurstKind == BurstKind.Chrysanthemum;
         var isBotan = _currentBurstKind == BurstKind.Botan;
         var isKamuro = _currentBurstKind == BurstKind.KamuroGiku;
+        var chrysanthemumCharcoalPalette = _kamuroPalettes[_random.Next(_kamuroPalettes.Length)];
+        var chrysanthemumTransitionColor = _burstPalettes[_random.Next(_burstPalettes.Length)].Outer;
 
         for (var i = 0; i < petalCount; i++)
         {
@@ -232,8 +235,11 @@ public partial class FireworkOverlayWindow : Window
                     : isBotan
                     ? 3.0 + _random.NextDouble() * 1.5
                     : 2.4 + _random.NextDouble() * 1.5,
-                StartColor = _currentPalette.Shell,
-                EndColor = _currentPalette.Outer,
+                StartColor = isChrysanthemum ? chrysanthemumCharcoalPalette.Shell : _currentPalette.Shell,
+                EndColor = isChrysanthemum ? chrysanthemumCharcoalPalette.Outer : _currentPalette.Outer,
+                TransitionColor = isChrysanthemum
+                    ? chrysanthemumTransitionColor
+                    : _currentPalette.Outer,
                 TrailStrength = isKamuro ? 7.6 : isBotan ? 0.8 : 1.45,
                 Drag = isKamuro
                     ? 0.974 + _random.NextDouble() * 0.008
@@ -262,7 +268,7 @@ public partial class FireworkOverlayWindow : Window
             p.Z = Math.Clamp(p.Z + p.Vz * dt, -MaxDepthOffset, MaxDepthOffset);
             p.Life -= dt * p.Decay;
 
-            var color = LerpColor(p.StartColor, p.EndColor, Math.Clamp(age * 1.08, 0, 1));
+            var color = GetParticleColor(p, age);
             var trailLife = p.Kind == BurstKind.KamuroGiku
                 ? p.Life * (0.3 + p.TrailStrength * 1.05)
                 : p.Life * (0.3 + p.TrailStrength * 0.2);
@@ -312,7 +318,7 @@ public partial class FireworkOverlayWindow : Window
         foreach (var p in _particles)
         {
             var age = 1 - (p.Life / p.InitialLife);
-            var color = LerpColor(p.StartColor, p.EndColor, Math.Clamp(age * 1.06, 0, 1));
+            var color = GetParticleColor(p, age);
             var shimmer = p.Twinkle ? 0.86 + 0.14 * Math.Sin((_started.Ticks / (double)TimeSpan.TicksPerSecond * 7) + p.FlickerPhase + age * 18) : 1;
             var perspective = GetPerspectiveScale(p.Z);
             var projectedX = p.BurstX + ((p.X - p.BurstX) * perspective);
@@ -330,7 +336,7 @@ public partial class FireworkOverlayWindow : Window
                 p.Size * (2.25 - age * 0.2) * kamuroGlow,
                 p.Size * (0.92 - age * 0.05) * (0.92 + kamuroGlow * 0.08),
                 color,
-                LerpColor(p.StartColor, p.EndColor, 0.35 + age * 0.25),
+                LerpColor(color, p.TransitionColor, 0.3 + age * 0.2),
                 lifeFactor * 0.11 * shimmer * botanBloom * kamuroGlow * centerFade * softFade,
                 Math.Clamp(lifeFactor * 0.68 * shimmer * botanBloom * kamuroGlow * centerFade * softFade, 0, 1)));
         }
@@ -368,7 +374,21 @@ public partial class FireworkOverlayWindow : Window
     private BurstPalette PickBurstPalette() => _burstPalettes[_random.Next(_burstPalettes.Length)];
     private BurstPalette PickKamuroPalette() => _kamuroPalettes[_random.Next(_kamuroPalettes.Length)];
 
-    private BurstKind PickBurstKind() => (BurstKind)_random.Next(3);
+    private BurstKind PickBurstKind()
+    {
+        var roll = _random.NextDouble();
+        if (roll < 0.45)
+        {
+            return BurstKind.Chrysanthemum;
+        }
+
+        if (roll < 0.90)
+        {
+            return BurstKind.Botan;
+        }
+
+        return BurstKind.KamuroGiku;
+    }
 
     private CurveGuideType PickCurveGuideType() => (CurveGuideType)_random.Next(3);
 
@@ -383,6 +403,26 @@ public partial class FireworkOverlayWindow : Window
     }
 
     private static WpfColor WithAlpha(WpfColor color, byte alpha) => WpfColor.FromArgb(alpha, color.R, color.G, color.B);
+
+    private static WpfColor GetParticleColor(Particle particle, double age)
+    {
+        if (particle.Kind != BurstKind.Chrysanthemum)
+        {
+            return LerpColor(particle.StartColor, particle.EndColor, Math.Clamp(age * 1.08, 0, 1));
+        }
+
+        // Chrysanthemum: start with warm shell color, then shift into 7-tone flame palette.
+        const double switchAge = 0.25;
+        if (age <= switchAge)
+        {
+            var earlyT = Math.Clamp(age / switchAge, 0, 1);
+            return LerpColor(particle.StartColor, particle.EndColor, earlyT);
+        }
+
+        var transitionWindow = Math.Max((1 - switchAge) * 0.10, 0.001);
+        var lateT = Math.Clamp((age - switchAge) / transitionWindow, 0, 1);
+        return LerpColor(particle.EndColor, particle.TransitionColor, lateT);
+    }
 
     private static double GetPerspectiveScale(double z)
     {
@@ -515,6 +555,7 @@ public partial class FireworkOverlayWindow : Window
         public double Size { get; set; }
         public WpfColor StartColor { get; set; }
         public WpfColor EndColor { get; set; }
+        public WpfColor TransitionColor { get; set; }
         public double TrailStrength { get; set; }
         public double Drag { get; set; }
         public double FlickerPhase { get; set; }
