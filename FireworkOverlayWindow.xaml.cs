@@ -145,10 +145,7 @@ public partial class FireworkOverlayWindow : Window
         var totalRise = Math.Max(_rocket.OriginY - _rocket.TargetY, 1);
         var progress = Math.Clamp((_rocket.OriginY - _rocket.Y) / totalRise, 0, 1);
         var gravity = 620 + (progress * 760);
-        var baseSway = Math.Sin((progress * Math.PI * 1.4) + _rocket.SwayPhase) * (1 - progress) * 18;
-        var curveSway = GetCurveGuideSway(_rocket.CurveGuide, progress, _rocket.SwayPhase);
-        var sway = baseSway + curveSway;
-        var verticalStretch = Math.Clamp(Math.Abs(_rocket.Vy) / 900, 0.35, 1.4);
+        var sway = Math.Sin((progress * Math.PI * 1.4) + _rocket.SwayPhase) * (1 - progress) * 18;
 
         _rocket.Vy += gravity * dt;
         _rocket.Vx = (_rocket.Vx * 0.952) + (sway * dt);
@@ -176,27 +173,6 @@ public partial class FireworkOverlayWindow : Window
             _rocket.FuseHidden = false;
         }
 
-        if (!_rocket.FuseHidden)
-        {
-            _trails.Add(new TrailParticle(
-                _rocket.X,
-                _rocket.Y,
-                0,
-                _rocket.X,
-                _rocket.Y,
-                0.96 - (progress * 0.26),
-                (5.6 + _random.NextDouble() * 1.8) * verticalStretch,
-                WithAlpha(GetCurveGuideTrailColor(_rocket.CurveGuide, _rocket.TrailColor), 185)));
-            _trails.Add(new TrailParticle(
-                _rocket.X + (_random.NextDouble() - 0.5) * 4,
-                _rocket.Y + 8 + _random.NextDouble() * (10 + (1 - progress) * 10),
-                0,
-                _rocket.X,
-                _rocket.Y,
-                0.68 - (progress * 0.18),
-                GetCurveGuideSparkSize(_rocket.CurveGuide, verticalStretch),
-                GetCurveGuideSparkColor(_rocket.CurveGuide)));
-        }
 
         var shouldBurst = _rocket.BurstDelay >= FuseDelaySeconds;
         if (!shouldBurst)
@@ -482,45 +458,9 @@ public partial class FireworkOverlayWindow : Window
         return 1 - (smooth * 0.78);
     }
 
-    private static double GetCurveGuideSway(CurveGuideType curveGuide, double progress, double phase)
-    {
-        return curveGuide switch
-        {
-            CurveGuideType.SilverDragon => Math.Sin((progress * Math.PI * 3.2) + phase * 1.15) * (1 - progress) * 30,
-            CurveGuideType.Kobana => Math.Sin((progress * Math.PI * 7.2) + phase * 1.5) * (1 - progress) * 12,
-            _ => 0
-        };
-    }
 
-    private static WpfColor GetCurveGuideTrailColor(CurveGuideType curveGuide, WpfColor fallback)
-    {
-        return curveGuide switch
-        {
-            CurveGuideType.SilverDragon => WpfColor.FromRgb(198, 218, 255),
-            CurveGuideType.Kobana => WpfColor.FromRgb(255, 182, 214),
-            _ => fallback
-        };
-    }
 
-    private double GetCurveGuideSparkSize(CurveGuideType curveGuide, double verticalStretch)
-    {
-        return curveGuide switch
-        {
-            CurveGuideType.SilverDragon => 3.4 + _random.NextDouble() * (1.3 + verticalStretch),
-            CurveGuideType.Kobana => 2.0 + _random.NextDouble() * (0.9 + verticalStretch * 0.7),
-            _ => 2.4 + _random.NextDouble() * verticalStretch
-        };
-    }
 
-    private static WpfColor GetCurveGuideSparkColor(CurveGuideType curveGuide)
-    {
-        return curveGuide switch
-        {
-            CurveGuideType.SilverDragon => WpfColor.FromRgb(226, 236, 255),
-            CurveGuideType.Kobana => WpfColor.FromRgb(255, 216, 236),
-            _ => WpfColor.FromRgb(255, 240, 210)
-        };
-    }
 
     private sealed record BurstPalette(string Name, WpfColor Outer, WpfColor Shell);
 
