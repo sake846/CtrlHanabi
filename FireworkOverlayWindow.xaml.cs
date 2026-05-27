@@ -195,7 +195,7 @@ public partial class FireworkOverlayWindow : Window
                 _rocket.Y,
                 0.68 - (progress * 0.18),
                 GetCurveGuideSparkSize(_rocket.CurveGuide, verticalStretch),
-                GetCurveGuideSparkColor(_rocket.CurveGuide))));
+                GetCurveGuideSparkColor(_rocket.CurveGuide)));
         }
 
         var shouldBurst = _rocket.BurstDelay >= FuseDelaySeconds;
