@@ -47,12 +47,14 @@ public partial class FireworkOverlayWindow : Window
     private Rocket? _rocket;
     private BurstPalette _currentPalette;
     private BurstKind _currentBurstKind;
+    private CurveGuideType _currentCurveGuideType;
 
     public FireworkOverlayWindow(HanabiSettings settings)
     {
         _settings = settings;
         _currentPalette = _burstPalettes[0];
         _currentBurstKind = BurstKind.Chrysanthemum;
+        _currentCurveGuideType = CurveGuideType.None;
         InitializeComponent();
         RootHost.Children.Add(_scene);
 
@@ -79,6 +81,7 @@ public partial class FireworkOverlayWindow : Window
         var startX = localX + (_random.NextDouble() - 0.5) * 36;
         var arcPull = (localX - startX) * 1.8;
         var travel = Math.Max(launchY - localY, 120);
+        _currentCurveGuideType = PickCurveGuideType();
         _currentBurstKind = PickBurstKind();
         _currentPalette = _currentBurstKind == BurstKind.KamuroGiku
             ? PickKamuroPalette()
@@ -100,7 +103,8 @@ public partial class FireworkOverlayWindow : Window
             BurstDelay = 0,
             FuseHidden = false,
             FuseStarted = false,
-            TrailColor = _currentPalette.Outer
+            TrailColor = _currentPalette.Outer,
+            CurveGuide = _currentCurveGuideType
         };
 
         _isBursting = false;
@@ -366,6 +370,8 @@ public partial class FireworkOverlayWindow : Window
 
     private BurstKind PickBurstKind() => (BurstKind)_random.Next(3);
 
+    private CurveGuideType PickCurveGuideType() => (CurveGuideType)_random.Next(3);
+
     private static WpfColor LerpColor(WpfColor from, WpfColor to, double t)
     {
         t = Math.Clamp(t, 0, 1);
@@ -465,6 +471,13 @@ public partial class FireworkOverlayWindow : Window
         KamuroGiku
     }
 
+    private enum CurveGuideType
+    {
+        None,
+        SilverDragon,
+        Kobana
+    }
+
     private sealed class Rocket
     {
         public double X { get; set; }
@@ -482,6 +495,7 @@ public partial class FireworkOverlayWindow : Window
         public bool FuseHidden { get; set; }
         public bool FuseStarted { get; set; }
         public WpfColor TrailColor { get; set; }
+        public CurveGuideType CurveGuide { get; set; }
     }
 
     private sealed class Particle
