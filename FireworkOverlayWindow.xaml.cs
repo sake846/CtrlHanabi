@@ -476,8 +476,8 @@ public partial class FireworkOverlayWindow : Window
             var px = rocket.PrevX + (dx * t);
             var py = rocket.PrevY + (dy * t);
             _trails.Add(new TrailParticle(
-                px + ((_random.NextDouble() - 0.5) * 1.2),
-                py + ((_random.NextDouble() - 0.5) * 1.6),
+                px,
+                py,
                 0,
                 px,
                 py,
