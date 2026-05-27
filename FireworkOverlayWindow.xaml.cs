@@ -117,6 +117,8 @@ public partial class FireworkOverlayWindow : Window
             PrevY = launchY
         };
 
+        EmitLaunchBlast(startX, launchY);
+
         _isBursting = false;
         _started = DateTime.UtcNow;
         Show();
@@ -428,6 +430,32 @@ public partial class FireworkOverlayWindow : Window
         }
     }
 
+    private void EmitLaunchBlast(double x, double y)
+    {
+        for (var i = 0; i < 34; i++)
+        {
+            var heat = _random.NextDouble();
+            var lift = _random.NextDouble();
+            var spread = 4 + lift * 15;
+            var px = x + ((_random.NextDouble() - 0.5) * spread);
+            var py = y - 7 - (lift * 30) + ((_random.NextDouble() - 0.5) * 5);
+            var flame = LerpColor(
+                WpfColor.FromRgb(255, 92, 28),
+                WpfColor.FromRgb(255, 245, 174),
+                heat);
+
+            _trails.Add(new TrailParticle(
+                px,
+                py,
+                0,
+                px,
+                py,
+                0.22 + (_random.NextDouble() * 0.28),
+                4.0 + ((1 - lift) * 7.5) + (_random.NextDouble() * 2.0),
+                WithAlpha(flame, (byte)(170 + _random.Next(70)))));
+        }
+    }
+
     private void EmitSilverDragonTrail(Rocket rocket, double progress)
     {
         var heat = 1 - progress;
@@ -454,7 +482,7 @@ public partial class FireworkOverlayWindow : Window
                 px,
                 py,
                 1.05 + _random.NextDouble() * 0.5,
-                3.8 + _random.NextDouble() * 2.2,
+                3.1 + _random.NextDouble() * 1.8,
                 WithAlpha(body, 198)));
         }
 
@@ -514,7 +542,22 @@ public partial class FireworkOverlayWindow : Window
         }
     }
 
-    private CurveGuideType PickCurveGuideType() => (CurveGuideType)_random.Next(3);
+    private CurveGuideType PickCurveGuideType()
+    {
+        var roll = _random.NextDouble();
+        if (roll < 0.30)
+        {
+            return CurveGuideType.None;
+        }
+
+        if (roll < 0.90)
+        {
+            return CurveGuideType.SilverDragon;
+        }
+
+        return CurveGuideType.Kobana;
+    }
+
     private SilverDragonTone PickSilverDragonTone() => _random.Next(2) == 0 ? SilverDragonTone.Charcoal : SilverDragonTone.Silver;
 
     private static WpfColor LerpColor(WpfColor from, WpfColor to, double t)
