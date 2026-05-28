@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using FormsScreen = System.Windows.Forms.Screen;
 using CtrlHanabi.Models;
@@ -15,6 +17,14 @@ public partial class FireworkOverlayWindow : Window
     private const double MaxDepthOffset = 280;
     private const double FuseDelaySeconds = 0.11;
     private const double FuseDarkSeconds = 0.055;
+    private const int GwlExStyle = -20;
+    private const int WsExTransparent = 0x00000020;
+    private const int WsExNoActivate = 0x08000000;
+    private static readonly nint HwndTopmost = -1;
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoActivate = 0x0010;
+    private const uint SwpShowWindow = 0x0040;
 
     private readonly DispatcherTimer _timer;
     private readonly List<Particle> _particles = [];
@@ -62,6 +72,7 @@ public partial class FireworkOverlayWindow : Window
         InitializeComponent();
         RootHost.Children.Add(_scene);
 
+        SourceInitialized += OnSourceInitialized;
         ApplyVirtualScreenBounds();
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
@@ -122,8 +133,32 @@ public partial class FireworkOverlayWindow : Window
         _isBursting = false;
         _started = DateTime.UtcNow;
         Show();
-        Activate();
+        BringOverlayToFrontWithoutActivation();
         _timer.Start();
+    }
+
+
+    private void OnSourceInitialized(object? sender, EventArgs e)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == nint.Zero)
+        {
+            return;
+        }
+
+        var extendedStyle = GetWindowLongPtr(hwnd, GwlExStyle);
+        SetWindowLongPtr(hwnd, GwlExStyle, extendedStyle | (nint)(WsExTransparent | WsExNoActivate));
+    }
+
+    private void BringOverlayToFrontWithoutActivation()
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == nint.Zero)
+        {
+            return;
+        }
+
+        SetWindowPos(hwnd, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow);
     }
 
     private void UpdateFrame()
@@ -751,4 +786,15 @@ public partial class FireworkOverlayWindow : Window
         public double Size { get; set; } = size;
         public WpfColor Color { get; set; } = color;
     }
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+    private static extern nint GetWindowLongPtr(nint hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+    private static extern nint SetWindowLongPtr(nint hWnd, int nIndex, nint dwNewLong);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(nint hWnd, nint hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
 }
