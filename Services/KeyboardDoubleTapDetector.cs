@@ -21,7 +21,7 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
     private readonly NativeMethods.LowLevelKeyboardProc _proc;
     private readonly Lock _syncRoot = new();
     private nint _hookId;
-    private Timer? _pollingTimer;
+    private System.Threading.Timer? _pollingTimer;
     private DateTime _lastCtrlDownUtc = DateTime.MinValue;
     private DateTime _lastObservedCtrlDownUtc = DateTime.MinValue;
     private int _ctrlTapCount;
@@ -44,7 +44,7 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
             _hookId = NativeMethods.SetHook(_proc);
         }
 
-        _pollingTimer ??= new Timer(PollKeyboardState, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(PollingIntervalMs));
+        _pollingTimer ??= new System.Threading.Timer(PollKeyboardState, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(PollingIntervalMs));
     }
 
     private nint HookCallback(int nCode, nint wParam, nint lParam)
