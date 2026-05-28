@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Forms;
 using CtrlHanabi.Models;
@@ -43,10 +44,11 @@ public sealed class AppController : IDisposable
 
         _lastTrigger = DateTime.UtcNow;
 
+        var mouse = NativeMethods.GetCursorScreenPoint();
+
         WpfApplication.Current.Dispatcher.Invoke(() =>
         {
-            var mouse = Cursor.Position;
-            _overlay.ShowFirework(new System.Windows.Point(mouse.X, mouse.Y));
+            _overlay.ShowFirework(mouse);
         });
     }
 
@@ -120,6 +122,35 @@ public sealed class AppController : IDisposable
 
         _notifyIcon.Visible = false;
         WpfApplication.Current.Shutdown();
+    }
+
+    private static class NativeMethods
+    {
+        public static System.Windows.Point GetCursorScreenPoint()
+        {
+            if (GetPhysicalCursorPos(out var point) || GetCursorPos(out point))
+            {
+                return new System.Windows.Point(point.X, point.Y);
+            }
+
+            var fallback = System.Windows.Forms.Cursor.Position;
+            return new System.Windows.Point(fallback.X, fallback.Y);
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetPhysicalCursorPos(out CursorPoint point);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetCursorPos(out CursorPoint point);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct CursorPoint
+        {
+            public int X;
+            public int Y;
+        }
     }
 
     public void Dispose()
