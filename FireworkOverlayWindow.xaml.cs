@@ -15,14 +15,8 @@ public partial class FireworkOverlayWindow : Window
 {
     private const double PerspectiveDistance = 720;
     private const double MaxDepthOffset = 280;
-    private const double OverlayHorizontalMargin = 420;
-    private const double OverlayTopMargin = 360;
-    private const double OverlayBottomMargin = 80;
-    private const double MinOverlayWidth = 900;
-    private const double MinOverlayHeight = 700;
-    private const double TrailEmitIntervalSeconds = 0.032;
-    private const int MaxTrailParticles = 3600;
     private const double FuseDelaySeconds = 0.11;
+    private const double FuseDarkSeconds = 0.055;
     private const int GwlExStyle = -20;
     private const int WsExTransparent = 0x00000020;
     private const int WsExNoActivate = 0x08000000;
@@ -79,7 +73,7 @@ public partial class FireworkOverlayWindow : Window
         RootHost.Children.Add(_scene);
 
         SourceInitialized += OnSourceInitialized;
-        ApplyIdleBounds();
+        ApplyVirtualScreenBounds();
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
@@ -90,15 +84,16 @@ public partial class FireworkOverlayWindow : Window
     public void ShowFirework(WpfPoint screenPoint)
     {
         _settings = _settingsService.Load();
-        ClearParticleState(trimExcess: false);
+        PrepareEffectStorage();
+        _particles.Clear();
+        _trails.Clear();
+        _renderParticles.Clear();
+        _renderTrails.Clear();
         _scene.ClearScene();
-
-        var launchScreenY = GetLaunchScreenY(screenPoint);
-        ApplyFireworkBounds(screenPoint, launchScreenY);
 
         var localX = screenPoint.X - Left;
         var localY = screenPoint.Y - Top;
-        var launchY = launchScreenY - Top;
+        var launchY = GetLaunchY(screenPoint);
         var startX = localX + (_random.NextDouble() - 0.5) * 36;
         var arcPull = (localX - startX) * 1.8;
         var travel = Math.Max(launchY - localY, 120);
@@ -184,9 +179,7 @@ public partial class FireworkOverlayWindow : Window
         {
             _timer.Stop();
             _scene.ClearScene();
-            ClearParticleState(trimExcess: true);
             Hide();
-            ApplyIdleBounds();
         }
     }
 
@@ -323,32 +316,31 @@ public partial class FireworkOverlayWindow : Window
             p.Y += p.Vy * dt;
             p.Z = Math.Clamp(p.Z + p.Vz * dt, -MaxDepthOffset, MaxDepthOffset);
             p.Life -= dt * p.Decay;
-            p.TrailEmitAccumulator += dt;
 
-            if (p.TrailEmitAccumulator >= TrailEmitIntervalSeconds)
-            {
-                p.TrailEmitAccumulator = 0;
-                var color = GetParticleColor(p, age);
-                var trailLife = p.Kind == BurstKind.KamuroGiku
-                    ? Math.Min(p.Life * (0.3 + p.TrailStrength * 0.42), 2.2)
-                    : Math.Min(p.Life * (0.3 + p.TrailStrength * 0.2), 1.0);
-                var trailSize = p.Kind == BurstKind.KamuroGiku
-                    ? p.Size * (0.30 + p.TrailStrength * 0.032)
-                    : p.Size * (0.92 + p.TrailStrength * 0.14);
-                _trails.Add(new TrailParticle(
-                    p.X,
-                    p.Y,
-                    p.Z,
-                    p.BurstX,
-                    p.BurstY,
-                    trailLife,
-                    trailSize,
-                    WithAlpha(color, 168)));
-            }
+            var color = GetParticleColor(p, age);
+            var trailLife = p.Kind == BurstKind.KamuroGiku
+                ? p.Life * (0.3 + p.TrailStrength * 1.05)
+                : p.Life * (0.3 + p.TrailStrength * 0.2);
+            var trailSize = p.Kind == BurstKind.KamuroGiku
+                ? p.Size * (0.30 + p.TrailStrength * 0.032)
+                : p.Size * (0.92 + p.TrailStrength * 0.14);
+            _trails.Add(new TrailParticle(
+                p.X,
+                p.Y,
+                p.Z,
+                p.BurstX,
+                p.BurstY,
+                trailLife,
+                trailSize,
+                WithAlpha(color, 168)));
 
             if (p.Life <= 0)
             {
                 _particles.RemoveAt(i);
+            }
+            else
+            {
+                _particles[i] = p;
             }
         }
 
@@ -361,35 +353,10 @@ public partial class FireworkOverlayWindow : Window
             {
                 _trails.RemoveAt(i);
             }
-        }
-
-        TrimOldestTrails();
-    }
-
-    private void ClearParticleState(bool trimExcess)
-    {
-        _particles.Clear();
-        _trails.Clear();
-        _renderParticles.Clear();
-        _renderTrails.Clear();
-
-        if (!trimExcess)
-        {
-            return;
-        }
-
-        _particles.TrimExcess();
-        _trails.TrimExcess();
-        _renderParticles.TrimExcess();
-        _renderTrails.TrimExcess();
-    }
-
-    private void TrimOldestTrails()
-    {
-        var overflow = _trails.Count - MaxTrailParticles;
-        if (overflow > 0)
-        {
-            _trails.RemoveRange(0, overflow);
+            else
+            {
+                _trails[i] = t;
+            }
         }
     }
 
@@ -439,62 +406,21 @@ public partial class FireworkOverlayWindow : Window
                 : new RenderRocket(_rocket.X, _rocket.Y, _rocket.OriginX, _rocket.OriginY, _rocket.TrailColor, _rocket.FuseHidden));
     }
 
-    private void ApplyIdleBounds()
+    private void ApplyVirtualScreenBounds()
     {
         Left = SystemParameters.VirtualScreenLeft;
         Top = SystemParameters.VirtualScreenTop;
-        Width = 1;
-        Height = 1;
+        Width = SystemParameters.VirtualScreenWidth;
+        Height = SystemParameters.VirtualScreenHeight;
     }
 
-    private void ApplyFireworkBounds(WpfPoint screenPoint, double launchScreenY)
+    private double GetLaunchY(WpfPoint screenPoint)
     {
         var screen = FormsScreen.FromPoint(new((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y)));
-        var workingArea = screen.WorkingArea;
-        var desiredHalfWidth = Math.Max(MinOverlayWidth / 2, _settings.ExplosionRadius + OverlayHorizontalMargin);
-        var desiredTop = Math.Min(screenPoint.Y, launchScreenY) - Math.Max(OverlayTopMargin, _settings.ExplosionRadius * 2.6);
-        var desiredBottom = Math.Max(screenPoint.Y, launchScreenY) + OverlayBottomMargin;
-        var desiredLeft = screenPoint.X - desiredHalfWidth;
-        var desiredRight = screenPoint.X + desiredHalfWidth;
-
-        var left = Math.Max(workingArea.Left, desiredLeft);
-        var top = Math.Max(workingArea.Top, desiredTop);
-        var right = Math.Min(workingArea.Right, desiredRight);
-        var bottom = Math.Min(workingArea.Bottom, desiredBottom);
-
-        if (right - left < MinOverlayWidth)
-        {
-            var extra = (MinOverlayWidth - (right - left)) / 2;
-            left = Math.Max(workingArea.Left, left - extra);
-            right = Math.Min(workingArea.Right, right + extra);
-        }
-
-        if (bottom - top < MinOverlayHeight)
-        {
-            var extra = (MinOverlayHeight - (bottom - top)) / 2;
-            top = Math.Max(workingArea.Top, top - extra);
-            bottom = Math.Min(workingArea.Bottom, bottom + extra);
-        }
-
-        Left = left;
-        Top = top;
-        Width = Math.Max(1, right - left);
-        Height = Math.Max(1, bottom - top);
+        return screen.WorkingArea.Bottom - Top - 8;
     }
 
-    private static double GetLaunchScreenY(WpfPoint screenPoint)
-    {
-        var screen = FormsScreen.FromPoint(new((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y)));
-        return screen.WorkingArea.Bottom - 8;
-    }
-
-    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
-    {
-        if (!IsVisible)
-        {
-            ApplyIdleBounds();
-        }
-    }
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e) => ApplyVirtualScreenBounds();
 
     protected override void OnClosed(EventArgs e)
     {
@@ -784,6 +710,23 @@ public partial class FireworkOverlayWindow : Window
         return 1 - (smooth * 0.78);
     }
 
+    private void PrepareEffectStorage()
+    {
+        var burstParticles = Math.Max(_settings.ParticleCount * 2, 168);
+        var launchTrails = 34;
+        var kobanaParticles = 36;
+        var rocketTrails = 80;
+        var burstTrailFrames = 72;
+        var burstTrailCount = burstParticles * burstTrailFrames;
+        var totalParticleCapacity = burstParticles + kobanaParticles;
+        var totalTrailCapacity = launchTrails + rocketTrails + burstTrailCount;
+
+        _particles.EnsureCapacity(totalParticleCapacity);
+        _trails.EnsureCapacity(totalTrailCapacity);
+        _renderParticles.EnsureCapacity(totalParticleCapacity);
+        _renderTrails.EnsureCapacity(totalTrailCapacity);
+    }
+
 
 
 
@@ -834,7 +777,7 @@ public partial class FireworkOverlayWindow : Window
         public double PrevY { get; set; }
     }
 
-    private sealed class Particle
+    private struct Particle
     {
         public double X { get; set; }
         public double Y { get; set; }
@@ -855,11 +798,10 @@ public partial class FireworkOverlayWindow : Window
         public double TrailStrength { get; set; }
         public double Drag { get; set; }
         public double FlickerPhase { get; set; }
-        public double TrailEmitAccumulator { get; set; }
         public bool Twinkle { get; set; }
     }
 
-    private sealed class TrailParticle(double x, double y, double z, double burstX, double burstY, double life, double size, WpfColor color)
+    private struct TrailParticle(double x, double y, double z, double burstX, double burstY, double life, double size, WpfColor color)
     {
         public double X { get; set; } = x;
         public double Y { get; set; } = y;
