@@ -109,13 +109,9 @@ public sealed class AppController : IDisposable
 
     private void RequestExit()
     {
-        var result = System.Windows.MessageBox.Show(
-            "CtrlHanabiを終了しますか？",
-            "CtrlHanabi",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
+        var result = NativeMethods.ShowTopmostExitConfirmation();
 
-        if (result != MessageBoxResult.Yes)
+        if (result != DialogResult.Yes)
         {
             return;
         }
@@ -126,6 +122,23 @@ public sealed class AppController : IDisposable
 
     private static class NativeMethods
     {
+        private const uint MbIconQuestion = 0x00000020;
+        private const uint MbYesNo = 0x00000004;
+        private const uint MbSetForeground = 0x00010000;
+        private const uint MbTopmost = 0x00040000;
+        private const int IdYes = 6;
+
+        public static DialogResult ShowTopmostExitConfirmation()
+        {
+            var result = MessageBox(
+                nint.Zero,
+                "CtrlHanabiを終了しますか？",
+                "CtrlHanabi",
+                MbYesNo | MbIconQuestion | MbSetForeground | MbTopmost);
+
+            return result == IdYes ? DialogResult.Yes : DialogResult.No;
+        }
+
         public static System.Windows.Point GetCursorScreenPoint()
         {
             if (GetPhysicalCursorPos(out var point) || GetCursorPos(out point))
@@ -136,6 +149,9 @@ public sealed class AppController : IDisposable
             var fallback = System.Windows.Forms.Cursor.Position;
             return new System.Windows.Point(fallback.X, fallback.Y);
         }
+
+        [DllImport("user32.dll", EntryPoint = "MessageBoxW", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern int MessageBox(nint hWnd, string lpText, string lpCaption, uint uType);
 
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
