@@ -15,8 +15,12 @@ public partial class FireworkOverlayWindow : Window
 {
     private const double PerspectiveDistance = 720;
     private const double MaxDepthOffset = 280;
+    private const double OverlayHorizontalMargin = 420;
+    private const double OverlayTopMargin = 360;
+    private const double OverlayBottomMargin = 80;
+    private const double MinOverlayWidth = 900;
+    private const double MinOverlayHeight = 700;
     private const double FuseDelaySeconds = 0.11;
-    private const double FuseDarkSeconds = 0.055;
     private const int GwlExStyle = -20;
     private const int WsExTransparent = 0x00000020;
     private const int WsExNoActivate = 0x08000000;
@@ -73,7 +77,7 @@ public partial class FireworkOverlayWindow : Window
         RootHost.Children.Add(_scene);
 
         SourceInitialized += OnSourceInitialized;
-        ApplyVirtualScreenBounds();
+        ApplyIdleBounds();
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
@@ -90,9 +94,12 @@ public partial class FireworkOverlayWindow : Window
         _renderTrails.Clear();
         _scene.ClearScene();
 
+        var launchScreenY = GetLaunchScreenY(screenPoint);
+        ApplyFireworkBounds(screenPoint, launchScreenY);
+
         var localX = screenPoint.X - Left;
         var localY = screenPoint.Y - Top;
-        var launchY = GetLaunchY(screenPoint);
+        var launchY = launchScreenY - Top;
         var startX = localX + (_random.NextDouble() - 0.5) * 36;
         var arcPull = (localX - startX) * 1.8;
         var travel = Math.Max(launchY - localY, 120);
@@ -179,6 +186,7 @@ public partial class FireworkOverlayWindow : Window
             _timer.Stop();
             _scene.ClearScene();
             Hide();
+            ApplyIdleBounds();
         }
     }
 
@@ -397,21 +405,62 @@ public partial class FireworkOverlayWindow : Window
                 : new RenderRocket(_rocket.X, _rocket.Y, _rocket.OriginX, _rocket.OriginY, _rocket.TrailColor, _rocket.FuseHidden));
     }
 
-    private void ApplyVirtualScreenBounds()
+    private void ApplyIdleBounds()
     {
         Left = SystemParameters.VirtualScreenLeft;
         Top = SystemParameters.VirtualScreenTop;
-        Width = SystemParameters.VirtualScreenWidth;
-        Height = SystemParameters.VirtualScreenHeight;
+        Width = 1;
+        Height = 1;
     }
 
-    private double GetLaunchY(WpfPoint screenPoint)
+    private void ApplyFireworkBounds(WpfPoint screenPoint, double launchScreenY)
     {
         var screen = FormsScreen.FromPoint(new((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y)));
-        return screen.WorkingArea.Bottom - Top - 8;
+        var workingArea = screen.WorkingArea;
+        var desiredHalfWidth = Math.Max(MinOverlayWidth / 2, _settings.ExplosionRadius + OverlayHorizontalMargin);
+        var desiredTop = Math.Min(screenPoint.Y, launchScreenY) - Math.Max(OverlayTopMargin, _settings.ExplosionRadius * 2.6);
+        var desiredBottom = Math.Max(screenPoint.Y, launchScreenY) + OverlayBottomMargin;
+        var desiredLeft = screenPoint.X - desiredHalfWidth;
+        var desiredRight = screenPoint.X + desiredHalfWidth;
+
+        var left = Math.Max(workingArea.Left, desiredLeft);
+        var top = Math.Max(workingArea.Top, desiredTop);
+        var right = Math.Min(workingArea.Right, desiredRight);
+        var bottom = Math.Min(workingArea.Bottom, desiredBottom);
+
+        if (right - left < MinOverlayWidth)
+        {
+            var extra = (MinOverlayWidth - (right - left)) / 2;
+            left = Math.Max(workingArea.Left, left - extra);
+            right = Math.Min(workingArea.Right, right + extra);
+        }
+
+        if (bottom - top < MinOverlayHeight)
+        {
+            var extra = (MinOverlayHeight - (bottom - top)) / 2;
+            top = Math.Max(workingArea.Top, top - extra);
+            bottom = Math.Min(workingArea.Bottom, bottom + extra);
+        }
+
+        Left = left;
+        Top = top;
+        Width = Math.Max(1, right - left);
+        Height = Math.Max(1, bottom - top);
     }
 
-    private void OnDisplaySettingsChanged(object? sender, EventArgs e) => ApplyVirtualScreenBounds();
+    private static double GetLaunchScreenY(WpfPoint screenPoint)
+    {
+        var screen = FormsScreen.FromPoint(new((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y)));
+        return screen.WorkingArea.Bottom - 8;
+    }
+
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+    {
+        if (!IsVisible)
+        {
+            ApplyIdleBounds();
+        }
+    }
 
     protected override void OnClosed(EventArgs e)
     {
