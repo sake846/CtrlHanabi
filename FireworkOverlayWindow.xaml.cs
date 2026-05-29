@@ -20,6 +20,8 @@ public partial class FireworkOverlayWindow : Window
     private const double OverlayBottomMargin = 80;
     private const double MinOverlayWidth = 900;
     private const double MinOverlayHeight = 700;
+    private const double TrailEmitIntervalSeconds = 0.032;
+    private const int MaxTrailParticles = 3600;
     private const double FuseDelaySeconds = 0.11;
     private const int GwlExStyle = -20;
     private const int WsExTransparent = 0x00000020;
@@ -88,10 +90,7 @@ public partial class FireworkOverlayWindow : Window
     public void ShowFirework(WpfPoint screenPoint)
     {
         _settings = _settingsService.Load();
-        _particles.Clear();
-        _trails.Clear();
-        _renderParticles.Clear();
-        _renderTrails.Clear();
+        ClearParticleState(trimExcess: false);
         _scene.ClearScene();
 
         var launchScreenY = GetLaunchScreenY(screenPoint);
@@ -185,6 +184,7 @@ public partial class FireworkOverlayWindow : Window
         {
             _timer.Stop();
             _scene.ClearScene();
+            ClearParticleState(trimExcess: true);
             Hide();
             ApplyIdleBounds();
         }
@@ -323,23 +323,28 @@ public partial class FireworkOverlayWindow : Window
             p.Y += p.Vy * dt;
             p.Z = Math.Clamp(p.Z + p.Vz * dt, -MaxDepthOffset, MaxDepthOffset);
             p.Life -= dt * p.Decay;
+            p.TrailEmitAccumulator += dt;
 
-            var color = GetParticleColor(p, age);
-            var trailLife = p.Kind == BurstKind.KamuroGiku
-                ? p.Life * (0.3 + p.TrailStrength * 1.05)
-                : p.Life * (0.3 + p.TrailStrength * 0.2);
-            var trailSize = p.Kind == BurstKind.KamuroGiku
-                ? p.Size * (0.30 + p.TrailStrength * 0.032)
-                : p.Size * (0.92 + p.TrailStrength * 0.14);
-            _trails.Add(new TrailParticle(
-                p.X,
-                p.Y,
-                p.Z,
-                p.BurstX,
-                p.BurstY,
-                trailLife,
-                trailSize,
-                WithAlpha(color, 168)));
+            if (p.TrailEmitAccumulator >= TrailEmitIntervalSeconds)
+            {
+                p.TrailEmitAccumulator = 0;
+                var color = GetParticleColor(p, age);
+                var trailLife = p.Kind == BurstKind.KamuroGiku
+                    ? Math.Min(p.Life * (0.3 + p.TrailStrength * 0.42), 2.2)
+                    : Math.Min(p.Life * (0.3 + p.TrailStrength * 0.2), 1.0);
+                var trailSize = p.Kind == BurstKind.KamuroGiku
+                    ? p.Size * (0.30 + p.TrailStrength * 0.032)
+                    : p.Size * (0.92 + p.TrailStrength * 0.14);
+                _trails.Add(new TrailParticle(
+                    p.X,
+                    p.Y,
+                    p.Z,
+                    p.BurstX,
+                    p.BurstY,
+                    trailLife,
+                    trailSize,
+                    WithAlpha(color, 168)));
+            }
 
             if (p.Life <= 0)
             {
@@ -356,6 +361,35 @@ public partial class FireworkOverlayWindow : Window
             {
                 _trails.RemoveAt(i);
             }
+        }
+
+        TrimOldestTrails();
+    }
+
+    private void ClearParticleState(bool trimExcess)
+    {
+        _particles.Clear();
+        _trails.Clear();
+        _renderParticles.Clear();
+        _renderTrails.Clear();
+
+        if (!trimExcess)
+        {
+            return;
+        }
+
+        _particles.TrimExcess();
+        _trails.TrimExcess();
+        _renderParticles.TrimExcess();
+        _renderTrails.TrimExcess();
+    }
+
+    private void TrimOldestTrails()
+    {
+        var overflow = _trails.Count - MaxTrailParticles;
+        if (overflow > 0)
+        {
+            _trails.RemoveRange(0, overflow);
         }
     }
 
@@ -821,6 +855,7 @@ public partial class FireworkOverlayWindow : Window
         public double TrailStrength { get; set; }
         public double Drag { get; set; }
         public double FlickerPhase { get; set; }
+        public double TrailEmitAccumulator { get; set; }
         public bool Twinkle { get; set; }
     }
 

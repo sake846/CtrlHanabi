@@ -45,6 +45,7 @@ internal sealed class ParticleSceneElement : FrameworkElement
     private IReadOnlyList<RenderTrail> _trails = Array.Empty<RenderTrail>();
     private IReadOnlyList<RenderParticle> _particles = Array.Empty<RenderParticle>();
     private RenderRocket? _rocket;
+    private readonly Dictionary<WpfColor, WpfBrush> _brushCache = [];
 
     static ParticleSceneElement()
     {
@@ -74,9 +75,10 @@ internal sealed class ParticleSceneElement : FrameworkElement
     {
         foreach (var trail in _trails)
         {
-            drawingContext.DrawEllipse(
-                CreateBrush(trail.Color, trail.Opacity),
-                null,
+            DrawEllipseWithOpacity(
+                drawingContext,
+                GetBrush(trail.Color),
+                trail.Opacity,
                 new WpfPoint(trail.X, trail.Y),
                 trail.Size / 2,
                 trail.Size / 2);
@@ -96,19 +98,40 @@ internal sealed class ParticleSceneElement : FrameworkElement
 
         foreach (var particle in _particles)
         {
-            drawingContext.DrawEllipse(
-                CreateBrush(particle.GlowColor, particle.GlowOpacity),
-                null,
+            DrawEllipseWithOpacity(
+                drawingContext,
+                GetBrush(particle.GlowColor),
+                particle.GlowOpacity,
                 new WpfPoint(particle.X, particle.Y),
                 particle.GlowSize / 2,
                 particle.GlowSize / 2);
-            drawingContext.DrawEllipse(
-                CreateBrush(particle.CoreColor, particle.CoreOpacity),
-                null,
+            DrawEllipseWithOpacity(
+                drawingContext,
+                GetBrush(particle.CoreColor),
+                particle.CoreOpacity,
                 new WpfPoint(particle.X, particle.Y),
                 particle.CoreSize / 2,
                 particle.CoreSize / 2);
         }
+    }
+
+    private void DrawEllipseWithOpacity(DrawingContext drawingContext, WpfBrush brush, double opacity, WpfPoint center, double radiusX, double radiusY)
+    {
+        drawingContext.PushOpacity(Math.Clamp(opacity, 0, 1));
+        drawingContext.DrawEllipse(brush, null, center, radiusX, radiusY);
+        drawingContext.Pop();
+    }
+
+    private WpfBrush GetBrush(WpfColor color)
+    {
+        if (_brushCache.TryGetValue(color, out var brush))
+        {
+            return brush;
+        }
+
+        brush = CreateFrozenBrush(color);
+        _brushCache[color] = brush;
+        return brush;
     }
 
     private static WpfBrush CreateFrozenBrush(WpfColor color)
@@ -144,16 +167,6 @@ internal sealed class ParticleSceneElement : FrameworkElement
         return pen;
     }
 
-    private static WpfBrush CreateBrush(WpfColor color, double opacity)
-    {
-        var brush = new SolidColorBrush(color) { Opacity = Math.Clamp(opacity, 0, 1) };
-        if (brush.CanFreeze)
-        {
-            brush.Freeze();
-        }
-
-        return brush;
-    }
 }
 
 internal readonly record struct RenderTrail(double X, double Y, double Size, WpfColor Color, double Opacity);
