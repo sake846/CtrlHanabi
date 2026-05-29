@@ -2,10 +2,15 @@ namespace CtrlHanabi.Models;
 
 public sealed class HanabiSettings
 {
-    public int DoubleTapThresholdMs { get; init; } = 320;
-    public int CooldownMs { get; init; } = 500;
-    public int ParticleCount { get; init; } = 90;
-    public double ExplosionRadius { get; init; } = 110;
+    private const int DefaultDoubleTapThresholdMs = 320;
+    private const int DefaultCooldownMs = 500;
+    private const int DefaultParticleCount = 90;
+    private const double DefaultExplosionRadius = 110;
+
+    public int DoubleTapThresholdMs { get; init; } = DefaultDoubleTapThresholdMs;
+    public int CooldownMs { get; init; } = DefaultCooldownMs;
+    public int ParticleCount { get; init; } = DefaultParticleCount;
+    public double ExplosionRadius { get; init; } = DefaultExplosionRadius;
 
     public static HanabiSettings Default => new();
 }

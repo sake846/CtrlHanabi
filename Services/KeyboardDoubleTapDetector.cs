@@ -16,6 +16,8 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
     private const int KeyDownMask = 0x8000;
     private const int PollingIntervalMs = 15;
     private const int DuplicateInputGuardMs = 40;
+    private const int DoubleTapCount = 2;
+    private const int FiveTapCount = 5;
 
     private readonly int _thresholdMs;
     private readonly NativeMethods.LowLevelKeyboardProc _proc;
@@ -97,22 +99,10 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
         {
             if (virtualKeyCode == VkLControl)
             {
-                if (_isLeftCtrlDown)
-                {
-                    return false;
-                }
-
-                _isLeftCtrlDown = true;
-                return true;
+                return MarkLeftCtrlDown();
             }
 
-            if (_isRightCtrlDown)
-            {
-                return false;
-            }
-
-            _isRightCtrlDown = true;
-            return true;
+            return MarkRightCtrlDown();
         }
     }
 
@@ -148,12 +138,12 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
             {
                 _ctrlTapCount++;
 
-                if (_ctrlTapCount == 2)
+                if (_ctrlTapCount == DoubleTapCount)
                 {
                     doubleTapDetected = DoubleTapDetected;
                 }
 
-                if (_ctrlTapCount >= 5)
+                if (_ctrlTapCount >= FiveTapCount)
                 {
                     fiveTapDetected = FiveTapDetected;
                     _ctrlTapCount = 0;
@@ -178,6 +168,28 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
     private static bool IsKeyDown(int virtualKeyCode)
     {
         return (NativeMethods.GetAsyncKeyState(virtualKeyCode) & KeyDownMask) != 0;
+    }
+
+    private bool MarkLeftCtrlDown()
+    {
+        if (_isLeftCtrlDown)
+        {
+            return false;
+        }
+
+        _isLeftCtrlDown = true;
+        return true;
+    }
+
+    private bool MarkRightCtrlDown()
+    {
+        if (_isRightCtrlDown)
+        {
+            return false;
+        }
+
+        _isRightCtrlDown = true;
+        return true;
     }
 
     public void Dispose()

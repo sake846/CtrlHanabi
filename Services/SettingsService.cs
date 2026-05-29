@@ -6,6 +6,8 @@ namespace CtrlHanabi.Services;
 
 public sealed class SettingsService
 {
+    private static readonly JsonSerializerOptions IndentedSerializerOptions = new() { WriteIndented = true };
+
     private static readonly string ConfigDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "CtrlHanabi");
@@ -33,7 +35,7 @@ public sealed class SettingsService
     public void Save(HanabiSettings settings)
     {
         Directory.CreateDirectory(ConfigDir);
-        var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonSerializer.Serialize(settings, IndentedSerializerOptions);
         File.WriteAllText(ConfigPath, json);
     }
 }

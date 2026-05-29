@@ -15,11 +15,8 @@ public partial class App : WpfApplication
     private void OnStartup(object sender, StartupEventArgs e)
     {
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
-        _singleInstanceMutex = new Mutex(true, SingleInstanceMutexName, out var createdNew);
-        if (!createdNew)
+        if (!TryAcquireSingleInstanceMutex())
         {
-            _singleInstanceMutex.Dispose();
-            _singleInstanceMutex = null;
             Shutdown();
             return;
         }
@@ -31,6 +28,24 @@ public partial class App : WpfApplication
     private void OnExit(object sender, ExitEventArgs e)
     {
         _controller?.Dispose();
+        ReleaseSingleInstanceMutex();
+    }
+
+    private bool TryAcquireSingleInstanceMutex()
+    {
+        _singleInstanceMutex = new Mutex(true, SingleInstanceMutexName, out var createdNew);
+        if (createdNew)
+        {
+            return true;
+        }
+
+        _singleInstanceMutex.Dispose();
+        _singleInstanceMutex = null;
+        return false;
+    }
+
+    private void ReleaseSingleInstanceMutex()
+    {
         _singleInstanceMutex?.ReleaseMutex();
         _singleInstanceMutex?.Dispose();
         _singleInstanceMutex = null;

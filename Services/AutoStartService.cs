@@ -17,10 +17,12 @@ public static class AutoStartService
     {
         using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, true);
         var exePath = Environment.ProcessPath;
-        if (key != null && !string.IsNullOrWhiteSpace(exePath))
+        if (key is null || string.IsNullOrWhiteSpace(exePath))
         {
-            key.SetValue(AppName, $"\"{exePath}\"");
+            return;
         }
+
+        key.SetValue(AppName, BuildQuotedPath(exePath));
     }
 
     public static void Disable()
@@ -28,4 +30,6 @@ public static class AutoStartService
         using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, true);
         key?.DeleteValue(AppName, false);
     }
+
+    private static string BuildQuotedPath(string path) => $"\"{path}\"";
 }

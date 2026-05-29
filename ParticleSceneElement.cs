@@ -9,6 +9,22 @@ namespace CtrlHanabi;
 
 internal sealed class ParticleSceneElement : FrameworkElement
 {
+    private const double TubeBodyOffsetX = 7.5;
+    private const double TubeBodyOffsetY = 11.5;
+    private const double TubeBodyWidth = 15;
+    private const double TubeBodyHeight = 23;
+    private const double TubeBodyCornerRadius = 3.2;
+    private const double TubeRimOffsetX = 8.2;
+    private const double TubeRimOffsetY = 12.4;
+    private const double TubeRimWidth = 16.4;
+    private const double TubeRimHeight = 4.8;
+    private const double TubeRimCornerRadius = 2.6;
+    private const double TubeInnerOffsetY = 9.9;
+    private const double TubeInnerRadiusX = 5.2;
+    private const double TubeInnerRadiusY = 1.85;
+    private const double FuseGlowRadius = 1.75;
+    private const double FuseCoreRadius = 0.625;
+
     private static readonly WpfBrush RocketCoreBrush = CreateFrozenBrush(WpfColor.FromRgb(255, 215, 0));
     private static readonly WpfBrush RocketGlowBrush = new RadialGradientBrush(Colors.White, Colors.Transparent);
     private static readonly WpfBrush TubeBodyBrush = CreateFrozenBrush(new LinearGradientBrush(
@@ -74,40 +90,40 @@ internal sealed class ParticleSceneElement : FrameworkElement
     {
         foreach (var trail in _trails)
         {
-            drawingContext.DrawEllipse(
-                CreateBrush(trail.Color, trail.Opacity),
-                null,
-                new WpfPoint(trail.X, trail.Y),
-                trail.Size / 2,
-                trail.Size / 2);
+            DrawFilledCircle(drawingContext, trail.X, trail.Y, trail.Size / 2, CreateBrush(trail.Color, trail.Opacity));
         }
 
         if (_rocket is RenderRocket rocket)
         {
-            drawingContext.DrawRoundedRectangle(TubeBodyBrush, TubeEdgePen, new Rect(rocket.OriginX - 7.5, rocket.OriginY - 11.5, 15, 23), 3.2, 3.2);
-            drawingContext.DrawRoundedRectangle(TubeRimBrush, null, new Rect(rocket.OriginX - 8.2, rocket.OriginY - 12.4, 16.4, 4.8), 2.6, 2.6);
-            drawingContext.DrawEllipse(TubeInnerBrush, null, new WpfPoint(rocket.OriginX, rocket.OriginY - 9.9), 5.2, 1.85);
+            drawingContext.DrawRoundedRectangle(
+                TubeBodyBrush,
+                TubeEdgePen,
+                new Rect(rocket.OriginX - TubeBodyOffsetX, rocket.OriginY - TubeBodyOffsetY, TubeBodyWidth, TubeBodyHeight),
+                TubeBodyCornerRadius,
+                TubeBodyCornerRadius);
+            drawingContext.DrawRoundedRectangle(
+                TubeRimBrush,
+                null,
+                new Rect(rocket.OriginX - TubeRimOffsetX, rocket.OriginY - TubeRimOffsetY, TubeRimWidth, TubeRimHeight),
+                TubeRimCornerRadius,
+                TubeRimCornerRadius);
+            drawingContext.DrawEllipse(
+                TubeInnerBrush,
+                null,
+                new WpfPoint(rocket.OriginX, rocket.OriginY - TubeInnerOffsetY),
+                TubeInnerRadiusX,
+                TubeInnerRadiusY);
             if (!rocket.FuseHidden)
             {
-                drawingContext.DrawEllipse(RocketDimGlowBrush, null, new WpfPoint(rocket.X, rocket.Y), 1.75, 1.75);
-                drawingContext.DrawEllipse(RocketDimCoreBrush, null, new WpfPoint(rocket.X, rocket.Y), 0.625, 0.625);
+                DrawFilledCircle(drawingContext, rocket.X, rocket.Y, FuseGlowRadius, RocketDimGlowBrush);
+                DrawFilledCircle(drawingContext, rocket.X, rocket.Y, FuseCoreRadius, RocketDimCoreBrush);
             }
         }
 
         foreach (var particle in _particles)
         {
-            drawingContext.DrawEllipse(
-                CreateBrush(particle.GlowColor, particle.GlowOpacity),
-                null,
-                new WpfPoint(particle.X, particle.Y),
-                particle.GlowSize / 2,
-                particle.GlowSize / 2);
-            drawingContext.DrawEllipse(
-                CreateBrush(particle.CoreColor, particle.CoreOpacity),
-                null,
-                new WpfPoint(particle.X, particle.Y),
-                particle.CoreSize / 2,
-                particle.CoreSize / 2);
+            DrawFilledCircle(drawingContext, particle.X, particle.Y, particle.GlowSize / 2, CreateBrush(particle.GlowColor, particle.GlowOpacity));
+            DrawFilledCircle(drawingContext, particle.X, particle.Y, particle.CoreSize / 2, CreateBrush(particle.CoreColor, particle.CoreOpacity));
         }
     }
 
@@ -154,6 +170,9 @@ internal sealed class ParticleSceneElement : FrameworkElement
 
         return brush;
     }
+
+    private static void DrawFilledCircle(DrawingContext drawingContext, double x, double y, double radius, WpfBrush brush)
+        => drawingContext.DrawEllipse(brush, null, new WpfPoint(x, y), radius, radius);
 
 }
 

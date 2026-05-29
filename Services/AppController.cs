@@ -9,6 +9,12 @@ namespace CtrlHanabi.Services;
 
 public sealed class AppController : IDisposable
 {
+    private const string AppName = "CtrlHanabi";
+    private const string AutoStartMenuText = "Windows起動時に実行";
+    private const string ResetSettingsMenuText = "設定をリセット";
+    private const string ExitMenuText = "終了";
+    private const string SettingsResetMessage = "設定を初期値に戻しました。";
+
     private readonly SettingsService _settingsService = new();
     private readonly KeyboardDoubleTapDetector _detector;
     private readonly FireworkOverlayWindow _overlay;
@@ -61,7 +67,7 @@ public sealed class AppController : IDisposable
     {
         var notifyIcon = new NotifyIcon
         {
-            Text = "CtrlHanabi",
+            Text = AppName,
             Icon = SystemIcons.Information,
             Visible = false,
             ContextMenuStrip = BuildMenu()
@@ -73,7 +79,7 @@ public sealed class AppController : IDisposable
     {
         var menu = new ContextMenuStrip();
 
-        var launchItem = new ToolStripMenuItem("Windows起動時に実行")
+        var launchItem = new ToolStripMenuItem(AutoStartMenuText)
         {
             Checked = AutoStartService.IsEnabled(),
             CheckOnClick = true
@@ -90,14 +96,14 @@ public sealed class AppController : IDisposable
             }
         };
 
-        var settingsItem = new ToolStripMenuItem("設定をリセット");
+        var settingsItem = new ToolStripMenuItem(ResetSettingsMenuText);
         settingsItem.Click += (_, _) =>
         {
             _settingsService.Save(HanabiSettings.Default);
-            System.Windows.MessageBox.Show("設定を初期値に戻しました。", "CtrlHanabi");
+            System.Windows.MessageBox.Show(SettingsResetMessage, AppName);
         };
 
-        var exitItem = new ToolStripMenuItem("終了");
+        var exitItem = new ToolStripMenuItem(ExitMenuText);
         exitItem.Click += (_, _) => WpfApplication.Current.Dispatcher.Invoke(RequestExit);
 
         menu.Items.Add(launchItem);
@@ -127,13 +133,14 @@ public sealed class AppController : IDisposable
         private const uint MbSetForeground = 0x00010000;
         private const uint MbTopmost = 0x00040000;
         private const int IdYes = 6;
+        private const string ExitConfirmMessage = "CtrlHanabiを終了しますか？";
 
         public static DialogResult ShowTopmostExitConfirmation()
         {
             var result = MessageBox(
                 nint.Zero,
-                "CtrlHanabiを終了しますか？",
-                "CtrlHanabi",
+                ExitConfirmMessage,
+                AppName,
                 MbYesNo | MbIconQuestion | MbSetForeground | MbTopmost);
 
             return result == IdYes ? DialogResult.Yes : DialogResult.No;

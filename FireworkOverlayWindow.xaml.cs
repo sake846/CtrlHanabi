@@ -13,10 +13,24 @@ namespace CtrlHanabi;
 
 public partial class FireworkOverlayWindow : Window
 {
+    private const double FrameDeltaSeconds = 0.016;
     private const double PerspectiveDistance = 720;
     private const double MaxDepthOffset = 280;
     private const double FuseDelaySeconds = 0.11;
     private const double FuseDarkSeconds = 0.055;
+    private const double RocketBaseGravity = 300;
+    private const double RocketProgressGravity = 360;
+    private const double RocketLaunchAverageGravity = 520;
+    private const double RocketLaunchVelocityScale = 0.985;
+    private const int MinimumBurstPetalCount = 168;
+    private const int LaunchBlastParticleCount = 34;
+    private const int KobanaPetalCount = 12;
+    private const int MaximumKobanaBurstCount = 3;
+    private const int KobanaCapacityParticleCount = 36;
+    private const int EstimatedRocketTrailCapacity = 80;
+    private const int EstimatedBurstTrailFrames = 72;
+    private static readonly double[] KobanaBurstProgressThresholds = [0.50, 0.68, 0.82];
+
     private const int GwlExStyle = -20;
     private const int WsExTransparent = 0x00000020;
     private const int WsExNoActivate = 0x08000000;
@@ -85,11 +99,7 @@ public partial class FireworkOverlayWindow : Window
     {
         _settings = _settingsService.Load();
         PrepareEffectStorage();
-        _particles.Clear();
-        _trails.Clear();
-        _renderParticles.Clear();
-        _renderTrails.Clear();
-        _scene.ClearScene();
+        ClearEffectStorage();
 
         var localX = screenPoint.X - Left;
         var localY = screenPoint.Y - Top;
@@ -190,16 +200,15 @@ public partial class FireworkOverlayWindow : Window
             return;
         }
 
-        const double dt = 0.016;
         var totalRise = Math.Max(_rocket.OriginY - _rocket.TargetY, 1);
         var progress = Math.Clamp((_rocket.OriginY - _rocket.Y) / totalRise, 0, 1);
-        var gravity = 620 + (progress * 760);
+        var gravity = RocketBaseGravity + (progress * RocketProgressGravity);
         var sway = Math.Sin((progress * Math.PI * 1.4) + _rocket.SwayPhase) * (1 - progress) * 18;
 
-        _rocket.Vy += gravity * dt;
-        _rocket.Vx = (_rocket.Vx * 0.952) + (sway * dt);
-        _rocket.X += _rocket.Vx * dt;
-        _rocket.Y += _rocket.Vy * dt;
+        _rocket.Vy += gravity * FrameDeltaSeconds;
+        _rocket.Vx = (_rocket.Vx * 0.952) + (sway * FrameDeltaSeconds);
+        _rocket.X += _rocket.Vx * FrameDeltaSeconds;
+        _rocket.Y += _rocket.Vy * FrameDeltaSeconds;
         EmitAscentEffect(_rocket, progress);
 
         var startedFalling = _rocket.Vy >= 0;
@@ -214,7 +223,7 @@ public partial class FireworkOverlayWindow : Window
 
         if (_rocket.FuseStarted)
         {
-            _rocket.BurstDelay += dt;
+            _rocket.BurstDelay += FrameDeltaSeconds;
             _rocket.FuseHidden = true;
         }
         else
@@ -237,7 +246,7 @@ public partial class FireworkOverlayWindow : Window
 
     private void SpawnBurst(double x, double y)
     {
-        var petalCount = Math.Max(_settings.ParticleCount * 2, 168);
+        var petalCount = Math.Max(_settings.ParticleCount * 2, MinimumBurstPetalCount);
         var outerRadius = _settings.ExplosionRadius * 1.18;
         var isChrysanthemum = _currentBurstKind == BurstKind.Chrysanthemum;
         var isBotan = _currentBurstKind == BurstKind.Botan;
@@ -303,19 +312,18 @@ public partial class FireworkOverlayWindow : Window
 
     private void UpdateParticles()
     {
-        const double dt = 0.016;
         for (var i = _particles.Count - 1; i >= 0; i--)
         {
             var p = _particles[i];
             var age = 1 - (p.Life / p.InitialLife);
-            p.Vy += (82 + age * 20) * dt;
+            p.Vy += (82 + age * 20) * FrameDeltaSeconds;
             p.Vx *= p.Drag;
             p.Vy *= p.Drag;
             p.Vz *= p.Drag;
-            p.X += p.Vx * dt;
-            p.Y += p.Vy * dt;
-            p.Z = Math.Clamp(p.Z + p.Vz * dt, -MaxDepthOffset, MaxDepthOffset);
-            p.Life -= dt * p.Decay;
+            p.X += p.Vx * FrameDeltaSeconds;
+            p.Y += p.Vy * FrameDeltaSeconds;
+            p.Z = Math.Clamp(p.Z + p.Vz * FrameDeltaSeconds, -MaxDepthOffset, MaxDepthOffset);
+            p.Life -= FrameDeltaSeconds * p.Decay;
 
             var color = GetParticleColor(p, age);
             var trailLife = p.Kind == BurstKind.KamuroGiku
@@ -347,7 +355,7 @@ public partial class FireworkOverlayWindow : Window
         for (var i = _trails.Count - 1; i >= 0; i--)
         {
             var t = _trails[i];
-            t.Life -= dt * 1.2;
+            t.Life -= FrameDeltaSeconds * 1.2;
             t.Size *= 0.992;
             if (t.Life <= 0 || t.Size <= 0.8)
             {
@@ -476,7 +484,7 @@ public partial class FireworkOverlayWindow : Window
 
     private void EmitLaunchBlast(double x, double y)
     {
-        for (var i = 0; i < 34; i++)
+        for (var i = 0; i < LaunchBlastParticleCount; i++)
         {
             var heat = _random.NextDouble();
             var lift = _random.NextDouble();
@@ -537,13 +545,12 @@ public partial class FireworkOverlayWindow : Window
 
     private void EmitKobanaBursts(Rocket rocket, double progress)
     {
-        if (rocket.KobanaBurstCount >= 3)
+        if (rocket.KobanaBurstCount >= MaximumKobanaBurstCount)
         {
             return;
         }
 
-        var thresholds = new[] { 0.50, 0.68, 0.82 };
-        if (progress < thresholds[rocket.KobanaBurstCount])
+        if (progress < KobanaBurstProgressThresholds[rocket.KobanaBurstCount])
         {
             return;
         }
@@ -554,11 +561,10 @@ public partial class FireworkOverlayWindow : Window
 
     private void SpawnKobanaBurst(double x, double y)
     {
-        var petals = 12;
         var color = _burstPalettes[_random.Next(_burstPalettes.Length)];
-        for (var i = 0; i < petals; i++)
+        for (var i = 0; i < KobanaPetalCount; i++)
         {
-            var angle = (Math.PI * 2 * i) / petals;
+            var angle = (Math.PI * 2 * i) / KobanaPetalCount;
             var speed = 46 + _random.NextDouble() * 26;
             _particles.Add(new Particle
             {
@@ -645,8 +651,7 @@ public partial class FireworkOverlayWindow : Window
 
     private static double CalculateRocketLaunchVelocity(double travel)
     {
-        const double averageGravity = 1000;
-        return -Math.Sqrt(2 * averageGravity * travel);
+        return -Math.Sqrt(2 * RocketLaunchAverageGravity * travel) * RocketLaunchVelocityScale;
     }
 
     private static double GetBotanBloomFactor(double age)
@@ -712,19 +717,24 @@ public partial class FireworkOverlayWindow : Window
 
     private void PrepareEffectStorage()
     {
-        var burstParticles = Math.Max(_settings.ParticleCount * 2, 168);
-        var launchTrails = 34;
-        var kobanaParticles = 36;
-        var rocketTrails = 80;
-        var burstTrailFrames = 72;
-        var burstTrailCount = burstParticles * burstTrailFrames;
-        var totalParticleCapacity = burstParticles + kobanaParticles;
-        var totalTrailCapacity = launchTrails + rocketTrails + burstTrailCount;
+        var burstParticles = Math.Max(_settings.ParticleCount * 2, MinimumBurstPetalCount);
+        var burstTrailCount = burstParticles * EstimatedBurstTrailFrames;
+        var totalParticleCapacity = burstParticles + KobanaCapacityParticleCount;
+        var totalTrailCapacity = LaunchBlastParticleCount + EstimatedRocketTrailCapacity + burstTrailCount;
 
         _particles.EnsureCapacity(totalParticleCapacity);
         _trails.EnsureCapacity(totalTrailCapacity);
         _renderParticles.EnsureCapacity(totalParticleCapacity);
         _renderTrails.EnsureCapacity(totalTrailCapacity);
+    }
+
+    private void ClearEffectStorage()
+    {
+        _particles.Clear();
+        _trails.Clear();
+        _renderParticles.Clear();
+        _renderTrails.Clear();
+        _scene.ClearScene();
     }
 
 
