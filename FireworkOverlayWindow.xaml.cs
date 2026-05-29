@@ -18,10 +18,10 @@ public partial class FireworkOverlayWindow : Window
     private const double MaxDepthOffset = 280;
     private const double FuseDelaySeconds = 0.11;
     private const double FuseDarkSeconds = 0.055;
-    private const double RocketBaseGravity = 300;
-    private const double RocketProgressGravity = 360;
+    private const double RocketBaseGravity = 260;
+    private const double RocketProgressGravity = 320;
     private const double RocketLaunchAverageGravity = 520;
-    private const double RocketLaunchVelocityScale = 0.985;
+    private const double RocketLaunchVelocityScale = 0.90;
     private const int MinimumBurstPetalCount = 168;
     private const int LaunchBlastParticleCount = 34;
     private const int KobanaPetalCount = 12;
