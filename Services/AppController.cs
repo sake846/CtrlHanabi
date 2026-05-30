@@ -20,6 +20,7 @@ public sealed class AppController : IDisposable
     private readonly SettingsService _settingsService = new();
     private readonly KeyboardDoubleTapDetector _detector;
     private readonly FireworkOverlayWindow _overlay;
+    private readonly Icon _trayIcon;
     private readonly NotifyIcon _notifyIcon;
     private readonly int _tapThresholdMs;
 
@@ -37,6 +38,7 @@ public sealed class AppController : IDisposable
         _detector.TripleTapDetected += OnTripleTapDetected;
         _detector.FiveTapDetected += OnFiveTapDetected;
 
+        _trayIcon = LoadTrayIcon();
         _notifyIcon = CreateNotifyIcon();
     }
 
@@ -114,11 +116,17 @@ public sealed class AppController : IDisposable
         var notifyIcon = new NotifyIcon
         {
             Text = AppName,
-            Icon = SystemIcons.Information,
+            Icon = _trayIcon,
             Visible = false,
             ContextMenuStrip = BuildMenu()
         };
         return notifyIcon;
+    }
+
+    private static Icon LoadTrayIcon()
+    {
+        var icon = Icon.ExtractAssociatedIcon(System.Windows.Forms.Application.ExecutablePath);
+        return icon is null ? SystemIcons.Information : (Icon)icon.Clone();
     }
 
     private ContextMenuStrip BuildMenu()
@@ -226,6 +234,7 @@ public sealed class AppController : IDisposable
     {
         _detector.Dispose();
         _notifyIcon.Dispose();
+        _trayIcon.Dispose();
         _overlay.Close();
     }
 }
