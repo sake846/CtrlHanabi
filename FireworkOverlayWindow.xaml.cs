@@ -60,9 +60,9 @@ public partial class FireworkOverlayWindow : Window
     ];
     private readonly BurstPalette[] _kamuroPalettes =
     [
-        new("kamuro-charcoal-bright", WpfColor.FromRgb(255, 200, 108), WpfColor.FromRgb(255, 244, 210)),
-        new("kamuro-charcoal-ember", WpfColor.FromRgb(255, 168, 92), WpfColor.FromRgb(255, 232, 192)),
-        new("kamuro-charcoal-deep", WpfColor.FromRgb(238, 132, 84), WpfColor.FromRgb(255, 214, 176))
+        new("kamuro-iron-bright", WpfColor.FromRgb(255, 236, 188), WpfColor.FromRgb(255, 250, 228)),
+        new("kamuro-iron-ember", WpfColor.FromRgb(255, 205, 132), WpfColor.FromRgb(255, 238, 184)),
+        new("kamuro-iron-deep", WpfColor.FromRgb(255, 172, 96), WpfColor.FromRgb(255, 222, 160))
     ];
 
     private HanabiSettings _settings;
@@ -203,10 +203,14 @@ public partial class FireworkOverlayWindow : Window
         var totalRise = Math.Max(_rocket.OriginY - _rocket.TargetY, 1);
         var progress = Math.Clamp((_rocket.OriginY - _rocket.Y) / totalRise, 0, 1);
         var gravity = RocketBaseGravity + (progress * RocketProgressGravity);
-        var sway = Math.Sin((progress * Math.PI * 1.4) + _rocket.SwayPhase) * (1 - progress) * 18;
+        var ascentEnvelope = Math.Pow(1 - progress, 0.82);
+        var baseSway = Math.Sin((progress * Math.PI * 1.6) + _rocket.SwayPhase) * 22 * ascentEnvelope;
+        var secondarySway = Math.Sin((progress * Math.PI * 4.1) + (_rocket.SwayPhase * 1.7)) * 8.5 * Math.Pow(1 - progress, 1.1);
+        var windJitter = (_random.NextDouble() - 0.5) * 6.8 * Math.Pow(1 - progress, 1.35);
+        var sway = baseSway + secondarySway + windJitter;
 
         _rocket.Vy += gravity * FrameDeltaSeconds;
-        _rocket.Vx = (_rocket.Vx * 0.952) + (sway * FrameDeltaSeconds);
+        _rocket.Vx = (_rocket.Vx * 0.944) + (sway * FrameDeltaSeconds);
         _rocket.X += _rocket.Vx * FrameDeltaSeconds;
         _rocket.Y += _rocket.Vy * FrameDeltaSeconds;
         EmitAscentEffect(_rocket, progress);
@@ -274,10 +278,13 @@ public partial class FireworkOverlayWindow : Window
             {
                 X = x,
                 Y = y,
+                PrevX = x,
+                PrevY = y,
                 BurstX = x,
                 BurstY = y,
                 Kind = _currentBurstKind,
                 Z = 0,
+                PrevZ = 0,
                 Vx = dirX * speed * petalJitter,
                 Vy = dirY * speed * petalJitter,
                 Vz = zDirection * speed * (isBotan ? 0.98 : isKamuro ? 0.8 : 0.92),
@@ -316,6 +323,9 @@ public partial class FireworkOverlayWindow : Window
         {
             var p = _particles[i];
             var age = 1 - (p.Life / p.InitialLife);
+            p.PrevX = p.X;
+            p.PrevY = p.Y;
+            p.PrevZ = p.Z;
             p.Vy += (82 + age * 20) * FrameDeltaSeconds;
             p.Vx *= p.Drag;
             p.Vy *= p.Drag;
@@ -332,15 +342,24 @@ public partial class FireworkOverlayWindow : Window
             var trailSize = p.Kind == BurstKind.KamuroGiku
                 ? p.Size * (0.30 + p.TrailStrength * 0.032)
                 : p.Size * (0.92 + p.TrailStrength * 0.14);
-            _trails.Add(new TrailParticle(
-                p.X,
-                p.Y,
-                p.Z,
-                p.BurstX,
-                p.BurstY,
-                trailLife,
-                trailSize,
-                WithAlpha(color, 168)));
+            var dx = p.X - p.PrevX;
+            var dy = p.Y - p.PrevY;
+            var distance = Math.Sqrt((dx * dx) + (dy * dy));
+            var segmentSpacing = Math.Max(1.35, trailSize * 0.55);
+            var segments = Math.Max(1, (int)Math.Ceiling(distance / segmentSpacing));
+            for (var segment = 1; segment <= segments; segment++)
+            {
+                var segmentT = segment / (double)segments;
+                _trails.Add(new TrailParticle(
+                    p.PrevX + (dx * segmentT),
+                    p.PrevY + (dy * segmentT),
+                    p.PrevZ + ((p.Z - p.PrevZ) * segmentT),
+                    p.BurstX,
+                    p.BurstY,
+                    trailLife * (0.9 + segmentT * 0.1),
+                    trailSize,
+                    WithAlpha(color, 168)));
+            }
 
             if (p.Life <= 0)
             {
@@ -629,7 +648,7 @@ public partial class FireworkOverlayWindow : Window
             return LerpColor(particle.StartColor, particle.EndColor, Math.Clamp(age * 1.08, 0, 1));
         }
 
-        // Chrysanthemum: start with warm shell color, then shift into 7-tone flame palette.
+        // Chrysanthemum: start with Fe-like spark color, then shift into 7-tone flame palette.
         const double switchAge = 0.25;
         if (age <= switchAge)
         {
@@ -791,10 +810,13 @@ public partial class FireworkOverlayWindow : Window
     {
         public double X { get; set; }
         public double Y { get; set; }
+        public double PrevX { get; set; }
+        public double PrevY { get; set; }
         public double BurstX { get; set; }
         public double BurstY { get; set; }
         public BurstKind Kind { get; set; }
         public double Z { get; set; }
+        public double PrevZ { get; set; }
         public double Vx { get; set; }
         public double Vy { get; set; }
         public double Vz { get; set; }
