@@ -13,6 +13,7 @@ public sealed class AppController : IDisposable
 {
     private const string AppName = "CtrlHanabi";
     private const string AutoStartMenuText = "Windows起動時に実行";
+    private const string HourlyStarmineMenuText = "毎時スターマインを打ち上げ";
     private const string ResetSettingsMenuText = "設定をリセット";
     private const string ExitMenuText = "終了";
     private const string SettingsResetMessage = "設定を初期値に戻しました。";
@@ -23,8 +24,10 @@ public sealed class AppController : IDisposable
     private readonly Icon _trayIcon;
     private readonly NotifyIcon _notifyIcon;
     private readonly int _tapThresholdMs;
+    private readonly System.Threading.Timer _hourlyStarmineTimer;
 
     private DateTime _lastTrigger = DateTime.MinValue;
+    private DateTime _lastHourlyStarmineHour = DateTime.MinValue;
     private CancellationTokenSource? _doubleTapCts;
 
     public AppController()
@@ -40,12 +43,14 @@ public sealed class AppController : IDisposable
 
         _trayIcon = LoadTrayIcon();
         _notifyIcon = CreateNotifyIcon();
+        _hourlyStarmineTimer = new System.Threading.Timer(CheckHourlyStarmine, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
     }
 
     public void Start()
     {
         _detector.Start();
         _notifyIcon.Visible = true;
+        _hourlyStarmineTimer.Change(TimeSpan.Zero, TimeSpan.FromSeconds(1));
     }
 
     private void OnDoubleTapDetected(object? sender, EventArgs e)
@@ -132,6 +137,7 @@ public sealed class AppController : IDisposable
     private ContextMenuStrip BuildMenu()
     {
         var menu = new ContextMenuStrip();
+        var settings = _settingsService.Load();
 
         var launchItem = new ToolStripMenuItem(AutoStartMenuText)
         {
@@ -150,10 +156,22 @@ public sealed class AppController : IDisposable
             }
         };
 
+        var hourlyStarmineItem = new ToolStripMenuItem(HourlyStarmineMenuText)
+        {
+            Checked = settings.HourlyStarmineEnabled,
+            CheckOnClick = true
+        };
+        hourlyStarmineItem.Click += (_, _) =>
+        {
+            var current = _settingsService.Load();
+            _settingsService.Save(CopySettings(current, hourlyStarmineEnabled: hourlyStarmineItem.Checked));
+        };
+
         var settingsItem = new ToolStripMenuItem(ResetSettingsMenuText);
         settingsItem.Click += (_, _) =>
         {
             _settingsService.Save(HanabiSettings.Default);
+            hourlyStarmineItem.Checked = HanabiSettings.Default.HourlyStarmineEnabled;
             System.Windows.MessageBox.Show(SettingsResetMessage, AppName);
         };
 
@@ -161,10 +179,46 @@ public sealed class AppController : IDisposable
         exitItem.Click += (_, _) => WpfApplication.Current.Dispatcher.Invoke(RequestExit);
 
         menu.Items.Add(launchItem);
+        menu.Items.Add(hourlyStarmineItem);
         menu.Items.Add(settingsItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exitItem);
         return menu;
+    }
+
+    private static HanabiSettings CopySettings(HanabiSettings settings, bool hourlyStarmineEnabled) => new()
+    {
+        DoubleTapThresholdMs = settings.DoubleTapThresholdMs,
+        CooldownMs = settings.CooldownMs,
+        ParticleCount = settings.ParticleCount,
+        ExplosionRadius = settings.ExplosionRadius,
+        HourlyStarmineEnabled = hourlyStarmineEnabled
+    };
+
+    private void CheckHourlyStarmine(object? state)
+    {
+        var now = DateTime.Now;
+        if (now.Minute != 59 || now.Second < 30 || now.Second > 34)
+        {
+            return;
+        }
+
+        var hourKey = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0);
+        if (_lastHourlyStarmineHour == hourKey)
+        {
+            return;
+        }
+
+        if (!_settingsService.Load().HourlyStarmineEnabled)
+        {
+            return;
+        }
+
+        _lastHourlyStarmineHour = hourKey;
+        WpfApplication.Current.Dispatcher.Invoke(() =>
+        {
+            _overlay.ShowFirework(new System.Windows.Point(0, 0), forceStarmine: true);
+        });
     }
 
     private void RequestExit()
@@ -233,6 +287,7 @@ public sealed class AppController : IDisposable
     public void Dispose()
     {
         _detector.Dispose();
+        _hourlyStarmineTimer.Dispose();
         _notifyIcon.Dispose();
         _trayIcon.Dispose();
         _overlay.Close();

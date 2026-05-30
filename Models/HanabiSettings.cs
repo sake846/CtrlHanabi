@@ -11,6 +11,7 @@ public sealed class HanabiSettings
     public int CooldownMs { get; init; } = DefaultCooldownMs;
     public int ParticleCount { get; init; } = DefaultParticleCount;
     public double ExplosionRadius { get; init; } = DefaultExplosionRadius;
+    public bool HourlyStarmineEnabled { get; init; }
 
     public static HanabiSettings Default => new();
 }
