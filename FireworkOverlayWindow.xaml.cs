@@ -22,6 +22,7 @@ public partial class FireworkOverlayWindow : Window
     private const double RocketProgressGravity = 320;
     private const double RocketLaunchAverageGravity = 520;
     private const double RocketLaunchVelocityScale = 0.90;
+    private const double RocketMaxHorizontalAccel = 16;
     private const int MinimumBurstPetalCount = 168;
     private const int LaunchBlastParticleCount = 34;
     private const int KobanaPetalCount = 12;
@@ -30,6 +31,19 @@ public partial class FireworkOverlayWindow : Window
     private const int EstimatedRocketTrailCapacity = 80;
     private const int EstimatedBurstTrailFrames = 72;
     private static readonly double[] KobanaBurstProgressThresholds = [0.50, 0.68, 0.82];
+    private const double StarmineChance = 0.55;
+    private const int StarmineMinShots = 4;
+    private const int StarmineMaxShots = 7;
+    private const int StarmineFixedShots = 20;
+    private const double StarmineBaseIntervalSeconds = 0.2;
+    private const double StarmineIntervalJitterSeconds = 0.04;
+    private const double StarmineLastPairGapSeconds = 0.05;
+    private const double LeafAscentEmitProgressStep = 0.064;
+    private const double GroundLeafContinuousIntervalSeconds = 0.064;
+    private const int GroundLeafStarBurstCount = 1;
+    private const double StarmineLaunchAngleJitter = 50;
+    private const double SingleLaunchAngleJitter = 10;
+    private const int MaxConcurrentRockets = 5;
 
     private const int GwlExStyle = -20;
     private const int WsExTransparent = 0x00000020;
@@ -45,6 +59,7 @@ public partial class FireworkOverlayWindow : Window
     private readonly List<TrailParticle> _trails = [];
     private readonly List<RenderTrail> _renderTrails = [];
     private readonly List<RenderParticle> _renderParticles = [];
+    private readonly List<RenderRocket> _renderRockets = [];
     private readonly Random _random = new();
     private readonly Services.SettingsService _settingsService = new();
     private readonly ParticleSceneElement _scene = new();
@@ -67,22 +82,17 @@ public partial class FireworkOverlayWindow : Window
 
     private HanabiSettings _settings;
     private DateTime _started;
-    private bool _isBursting;
-    private Rocket? _rocket;
-    private BurstPalette _currentPalette;
-    private BurstKind _currentBurstKind;
-    private CurveGuideType _currentCurveGuideType;
-    private BurstPalette _currentChrysanthemumCharcoalPalette;
-    private SilverDragonTone _currentSilverDragonTone;
+    private readonly List<Rocket> _activeRockets = [];
+    private readonly Queue<LaunchRequest> _launchQueue = new();
+    private double _launchDelay;
+    private bool _isStarmineActive;
+    private double _starmineGroundX;
+    private double _starmineGroundY;
+    private double _groundLeafCooldown;
 
     public FireworkOverlayWindow(HanabiSettings settings)
     {
         _settings = settings;
-        _currentPalette = _burstPalettes[0];
-        _currentBurstKind = BurstKind.Chrysanthemum;
-        _currentCurveGuideType = CurveGuideType.None;
-        _currentChrysanthemumCharcoalPalette = _kamuroPalettes[0];
-        _currentSilverDragonTone = SilverDragonTone.Charcoal;
         InitializeComponent();
         RootHost.Children.Add(_scene);
 
@@ -95,53 +105,14 @@ public partial class FireworkOverlayWindow : Window
         Hide();
     }
 
-    public void ShowFirework(WpfPoint screenPoint)
+    public void ShowFirework(WpfPoint screenPoint, bool forceStarmine = false)
     {
         _settings = _settingsService.Load();
         PrepareEffectStorage();
         ClearEffectStorage();
-
-        var localX = screenPoint.X - Left;
-        var localY = screenPoint.Y - Top;
-        var launchY = GetLaunchY(screenPoint);
-        var startX = localX + (_random.NextDouble() - 0.5) * 36;
-        var arcPull = (localX - startX) * 1.8;
-        var travel = Math.Max(launchY - localY, 120);
-        _currentCurveGuideType = PickCurveGuideType();
-        _currentBurstKind = PickBurstKind();
-        _currentChrysanthemumCharcoalPalette = _kamuroPalettes[_random.Next(_kamuroPalettes.Length)];
-        _currentSilverDragonTone = PickSilverDragonTone();
-        _currentPalette = _currentBurstKind == BurstKind.KamuroGiku
-            ? PickKamuroPalette()
-            : PickBurstPalette();
-
-        _rocket = new Rocket
-        {
-            X = startX,
-            Y = launchY,
-            OriginX = startX,
-            OriginY = launchY,
-            TargetX = localX,
-            TargetY = localY,
-            ApexX = localX,
-            ApexY = localY,
-            Vy = CalculateRocketLaunchVelocity(travel),
-            Vx = arcPull,
-            SwayPhase = _random.NextDouble() * Math.PI * 2,
-            BurstDelay = 0,
-            FuseHidden = false,
-            FuseStarted = false,
-            TrailColor = _currentPalette.Outer,
-            CurveGuide = _currentCurveGuideType,
-            LastTrailEmitProgress = 0,
-            KobanaBurstCount = 0,
-            PrevX = startX,
-            PrevY = launchY
-        };
-
-        EmitLaunchBlast(startX, launchY);
-
-        _isBursting = false;
+        QueueLaunchPattern(screenPoint, forceStarmine);
+        _activeRockets.Clear();
+        _launchDelay = 0;
         _started = DateTime.UtcNow;
         Show();
         BringOverlayToFrontWithoutActivation();
@@ -174,87 +145,210 @@ public partial class FireworkOverlayWindow : Window
 
     private void UpdateFrame()
     {
-        if (!_isBursting)
+        if (_isStarmineActive && _activeRockets.Count == 0 && _launchQueue.Count == 0)
         {
-            UpdateRocket();
-            UpdateParticles();
-            RenderFrame();
-            return;
+            _isStarmineActive = false;
         }
 
+        if (_launchQueue.Count > 0)
+        {
+            _launchDelay -= FrameDeltaSeconds;
+            if (_launchDelay <= 0 && _activeRockets.Count < MaxConcurrentRockets)
+            {
+                SpawnNextLaunch();
+            }
+        }
+        else if (_isStarmineActive && _activeRockets.Count == 0)
+        {
+            _groundLeafCooldown -= FrameDeltaSeconds;
+            if (_groundLeafCooldown <= 0)
+            {
+                EmitGroundLeafStars(_starmineGroundX, _starmineGroundY);
+                _groundLeafCooldown = GroundLeafContinuousIntervalSeconds;
+            }
+        }
+
+        UpdateRockets();
         UpdateParticles();
         RenderFrame();
 
-        if (!_particles.Any() && !_trails.Any())
+        if (_activeRockets.Count == 0 && _launchQueue.Count == 0 && !_particles.Any() && !_trails.Any())
         {
+            _isStarmineActive = false;
             _timer.Stop();
             _scene.ClearScene();
             Hide();
         }
     }
 
-    private void UpdateRocket()
+    private void UpdateRockets()
     {
-        if (_rocket is null)
+        if (_activeRockets.Count == 0)
         {
             return;
         }
 
-        var totalRise = Math.Max(_rocket.OriginY - _rocket.TargetY, 1);
-        var progress = Math.Clamp((_rocket.OriginY - _rocket.Y) / totalRise, 0, 1);
-        var gravity = RocketBaseGravity + (progress * RocketProgressGravity);
-        var ascentEnvelope = Math.Pow(1 - progress, 0.82);
-        var baseSway = Math.Sin((progress * Math.PI * 1.6) + _rocket.SwayPhase) * 22 * ascentEnvelope;
-        var secondarySway = Math.Sin((progress * Math.PI * 4.1) + (_rocket.SwayPhase * 1.7)) * 8.5 * Math.Pow(1 - progress, 1.1);
-        var windJitter = (_random.NextDouble() - 0.5) * 6.8 * Math.Pow(1 - progress, 1.35);
-        var sway = baseSway + secondarySway + windJitter;
-
-        _rocket.Vy += gravity * FrameDeltaSeconds;
-        _rocket.Vx = (_rocket.Vx * 0.944) + (sway * FrameDeltaSeconds);
-        _rocket.X += _rocket.Vx * FrameDeltaSeconds;
-        _rocket.Y += _rocket.Vy * FrameDeltaSeconds;
-        EmitAscentEffect(_rocket, progress);
-
-        var startedFalling = _rocket.Vy >= 0;
-        var highEnough = _rocket.Y <= (_rocket.TargetY + 8);
-
-        if (!_rocket.FuseStarted && startedFalling && highEnough)
+        for (var i = _activeRockets.Count - 1; i >= 0; i--)
         {
-            _rocket.FuseStarted = true;
-            _rocket.ApexX = _rocket.X;
-            _rocket.ApexY = _rocket.Y;
+            var rocket = _activeRockets[i];
+            var totalRise = Math.Max(rocket.OriginY - rocket.TargetY, 1);
+            var progress = Math.Clamp((rocket.OriginY - rocket.Y) / totalRise, 0, 1);
+            var gravity = RocketBaseGravity + (progress * RocketProgressGravity);
+            rocket.Vy += gravity * FrameDeltaSeconds;
+            rocket.Vx += rocket.HorizontalAccel * FrameDeltaSeconds;
+            rocket.X += rocket.Vx * FrameDeltaSeconds;
+            rocket.Y += rocket.Vy * FrameDeltaSeconds;
+            EmitAscentEffect(rocket, progress);
+
+            var startedFalling = rocket.Vy >= 0;
+            var highEnough = rocket.Y <= (rocket.TargetY + 8);
+
+            if (!rocket.FuseStarted && startedFalling && highEnough)
+            {
+                rocket.FuseStarted = true;
+                rocket.ApexX = rocket.X;
+                rocket.ApexY = rocket.Y;
+            }
+
+            if (rocket.FuseStarted)
+            {
+                rocket.BurstDelay += FrameDeltaSeconds;
+                rocket.FuseHidden = true;
+            }
+            else
+            {
+                rocket.BurstDelay = 0;
+                rocket.FuseHidden = false;
+            }
+
+            var shouldBurst = rocket.BurstDelay >= FuseDelaySeconds;
+            if (!shouldBurst)
+            {
+                _activeRockets[i] = rocket;
+                continue;
+            }
+
+            SpawnBurst(rocket);
+            _activeRockets.RemoveAt(i);
+        }
+    }
+
+    private void QueueLaunchPattern(WpfPoint screenPoint, bool forceStarmine)
+    {
+        _launchQueue.Clear();
+        var localX = screenPoint.X - Left;
+        var localY = screenPoint.Y - Top;
+
+        if (!forceStarmine)
+        {
+            _isStarmineActive = false;
+            _launchQueue.Enqueue(new LaunchRequest(localX, localY, 0, false));
+            return;
         }
 
-        if (_rocket.FuseStarted)
+        _isStarmineActive = true;
+        var centerX = Width * 0.5;
+        _starmineGroundX = centerX;
+        _starmineGroundY = GetLaunchY(new WpfPoint(Left + centerX, Top + (Height * 0.5)));
+        _groundLeafCooldown = 0;
+        for (var i = 0; i < StarmineFixedShots; i++)
         {
-            _rocket.BurstDelay += FrameDeltaSeconds;
-            _rocket.FuseHidden = true;
+            var delay = i switch
+            {
+                0 => 0,
+                19 => StarmineLastPairGapSeconds,
+                < 20 => 0.5,
+                _ => StarmineBaseIntervalSeconds
+            };
+            var targetY = i < 8
+                ? Height * 0.50
+                : i < 15
+                    ? Height * 0.40
+                    : Height * 0.20;
+            var burstScale = i < 8
+                ? 1.0
+                : i < 15
+                    ? 1.5
+                    : 2.0;
+            _launchQueue.Enqueue(new LaunchRequest(centerX, targetY, delay, true, burstScale));
+        }
+    }
+
+    private void SpawnNextLaunch()
+    {
+        if (_launchQueue.Count == 0)
+        {
+            return;
+        }
+
+        var launch = _launchQueue.Dequeue();
+        var launchY = GetLaunchY(new WpfPoint(launch.TargetX + Left, launch.TargetY + Top));
+        var startX = launch.IsStarmine ? launch.TargetX : launch.TargetX + ((_random.NextDouble() - 0.5) * 36);
+        var altitudeFactor = 1 - Math.Clamp(launch.TargetY / Math.Max(Height, 1), 0, 1);
+        var jitterScale = 1.2 + (altitudeFactor * 2.0);
+        var launchAngleJitter = launch.IsStarmine ? StarmineLaunchAngleJitter : SingleLaunchAngleJitter;
+        var arcPull = ((launch.TargetX - startX) * 1.8) + ((_random.NextDouble() - 0.5) * launchAngleJitter * jitterScale);
+        var travel = Math.Max(launchY - launch.TargetY, 120);
+        var curveGuideType = PickCurveGuideType(launch.IsStarmine);
+        var burstKind = PickBurstKind(allowKamuro: !launch.IsStarmine);
+        var chrysanthemumCharcoalPalette = _kamuroPalettes[_random.Next(_kamuroPalettes.Length)];
+        var silverDragonTone = PickSilverDragonTone();
+        var burstPalette = burstKind == BurstKind.KamuroGiku
+            ? PickKamuroPalette()
+            : PickBurstPalette();
+
+        _activeRockets.Add(new Rocket
+        {
+            X = startX,
+            Y = launchY,
+            OriginX = startX,
+            OriginY = launchY,
+            TargetX = launch.TargetX,
+            TargetY = launch.TargetY,
+            ApexX = launch.TargetX,
+            ApexY = launch.TargetY,
+            Vy = CalculateRocketLaunchVelocity(travel),
+            Vx = arcPull,
+            SwayPhase = _random.NextDouble() * Math.PI * 2,
+            HorizontalAccel = (_random.NextDouble() - 0.5) * (RocketMaxHorizontalAccel * 2),
+            BurstDelay = 0,
+            FuseHidden = false,
+            FuseStarted = false,
+            TrailColor = burstPalette.Outer,
+            CurveGuide = curveGuideType,
+            LastTrailEmitProgress = 0,
+            KobanaBurstCount = 0,
+            PrevX = startX,
+            PrevY = launchY,
+            BurstKind = burstKind,
+            BurstPalette = burstPalette,
+            ChrysanthemumCharcoalPalette = chrysanthemumCharcoalPalette,
+            SilverDragonTone = silverDragonTone,
+            BurstScale = launch.BurstScale
+        });
+
+        EmitLaunchBlast(startX, launchY);
+        if (launch.IsStarmine && _launchQueue.Count > 0)
+        {
+            var nextDelay = _launchQueue.Peek().DelaySeconds;
+            var jitter = _random.NextDouble() * StarmineIntervalJitterSeconds;
+            _launchDelay = nextDelay + jitter;
         }
         else
         {
-            _rocket.BurstDelay = 0;
-            _rocket.FuseHidden = false;
+            _launchDelay = launch.DelaySeconds + (_random.NextDouble() * StarmineIntervalJitterSeconds);
         }
-
-
-        var shouldBurst = _rocket.BurstDelay >= FuseDelaySeconds;
-        if (!shouldBurst)
-        {
-            return;
-        }
-
-        SpawnBurst(_rocket.ApexX, _rocket.ApexY);
-        _rocket = null;
-        _isBursting = true;
     }
 
-    private void SpawnBurst(double x, double y)
+    private void SpawnBurst(Rocket rocket)
     {
+        var x = rocket.ApexX;
+        var y = rocket.ApexY;
         var petalCount = Math.Max(_settings.ParticleCount * 2, MinimumBurstPetalCount);
-        var outerRadius = _settings.ExplosionRadius * 1.18;
-        var isChrysanthemum = _currentBurstKind == BurstKind.Chrysanthemum;
-        var isBotan = _currentBurstKind == BurstKind.Botan;
-        var isKamuro = _currentBurstKind == BurstKind.KamuroGiku;
+        var outerRadius = _settings.ExplosionRadius * 1.18 * rocket.BurstScale;
+        var isChrysanthemum = rocket.BurstKind == BurstKind.Chrysanthemum;
+        var isBotan = rocket.BurstKind == BurstKind.Botan;
+        var isKamuro = rocket.BurstKind == BurstKind.KamuroGiku;
         var chrysanthemumTransitionColor = PickWeightedBurstPalette().Outer;
 
         for (var i = 0; i < petalCount; i++)
@@ -282,7 +376,7 @@ public partial class FireworkOverlayWindow : Window
                 PrevY = y,
                 BurstX = x,
                 BurstY = y,
-                Kind = _currentBurstKind,
+                Kind = rocket.BurstKind,
                 Z = 0,
                 PrevZ = 0,
                 Vx = dirX * speed * petalJitter,
@@ -300,11 +394,11 @@ public partial class FireworkOverlayWindow : Window
                     : isBotan
                     ? 3.0 + _random.NextDouble() * 1.5
                     : 2.4 + _random.NextDouble() * 1.5,
-                StartColor = isChrysanthemum ? _currentChrysanthemumCharcoalPalette.Shell : _currentPalette.Shell,
-                EndColor = isChrysanthemum ? _currentChrysanthemumCharcoalPalette.Outer : _currentPalette.Outer,
+                StartColor = isChrysanthemum ? rocket.ChrysanthemumCharcoalPalette.Shell : rocket.BurstPalette.Shell,
+                EndColor = isChrysanthemum ? rocket.ChrysanthemumCharcoalPalette.Outer : rocket.BurstPalette.Outer,
                 TransitionColor = isChrysanthemum
                     ? chrysanthemumTransitionColor
-                    : _currentPalette.Outer,
+                    : rocket.BurstPalette.Outer,
                 TrailStrength = isKamuro ? 7.6 : isBotan ? 0.8 : 1.45,
                 Drag = isKamuro
                     ? 0.974 + _random.NextDouble() * 0.008
@@ -425,12 +519,16 @@ public partial class FireworkOverlayWindow : Window
                 Math.Clamp(lifeFactor * 0.68 * shimmer * botanBloom * kamuroGlow * centerFade * softFade, 0, 1)));
         }
 
+        _renderRockets.Clear();
+        foreach (var rocket in _activeRockets)
+        {
+            _renderRockets.Add(new RenderRocket(rocket.X, rocket.Y, rocket.OriginX, rocket.OriginY, rocket.TrailColor, rocket.FuseHidden));
+        }
+
         _scene.UpdateScene(
             _renderTrails,
             _renderParticles,
-            _rocket is null
-                ? null
-                : new RenderRocket(_rocket.X, _rocket.Y, _rocket.OriginX, _rocket.OriginY, _rocket.TrailColor, _rocket.FuseHidden));
+            _renderRockets);
     }
 
     private void ApplyVirtualScreenBounds()
@@ -471,9 +569,14 @@ public partial class FireworkOverlayWindow : Window
         return _burstPalettes[6]; // violet
     }
 
-    private BurstKind PickBurstKind()
+    private BurstKind PickBurstKind(bool allowKamuro = true)
     {
         var roll = _random.NextDouble();
+        if (!allowKamuro)
+        {
+            return roll < 0.5 ? BurstKind.Chrysanthemum : BurstKind.Botan;
+        }
+
         if (roll < 0.45)
         {
             return BurstKind.Chrysanthemum;
@@ -489,6 +592,12 @@ public partial class FireworkOverlayWindow : Window
 
     private void EmitAscentEffect(Rocket rocket, double progress)
     {
+        if (rocket.CurveGuide == CurveGuideType.LeafSplay)
+        {
+            EmitLeafSplayTrail(rocket, progress);
+            return;
+        }
+
         if (rocket.CurveGuide == CurveGuideType.SilverDragon)
         {
             EmitSilverDragonTrail(rocket, progress);
@@ -530,11 +639,11 @@ public partial class FireworkOverlayWindow : Window
     private void EmitSilverDragonTrail(Rocket rocket, double progress)
     {
         var heat = 1 - progress;
-        var charcoal = _currentSilverDragonTone == SilverDragonTone.Charcoal
-            ? _currentChrysanthemumCharcoalPalette.Shell
+        var charcoal = rocket.SilverDragonTone == SilverDragonTone.Charcoal
+            ? rocket.ChrysanthemumCharcoalPalette.Shell
             : WpfColor.FromRgb(196, 208, 220);
-        var ember = _currentSilverDragonTone == SilverDragonTone.Charcoal
-            ? _currentChrysanthemumCharcoalPalette.Outer
+        var ember = rocket.SilverDragonTone == SilverDragonTone.Charcoal
+            ? rocket.ChrysanthemumCharcoalPalette.Outer
             : WpfColor.FromRgb(244, 250, 255);
         var body = LerpColor(charcoal, ember, 0.42 + (heat * 0.44) + (_random.NextDouble() * 0.08));
         var dx = rocket.X - rocket.PrevX;
@@ -560,6 +669,69 @@ public partial class FireworkOverlayWindow : Window
         rocket.PrevX = rocket.X;
         rocket.PrevY = rocket.Y;
         rocket.LastTrailEmitProgress = progress;
+    }
+
+    private void EmitLeafSplayTrail(Rocket rocket, double progress)
+    {
+        if ((progress - rocket.LastTrailEmitProgress) < LeafAscentEmitProgressStep)
+        {
+            return;
+        }
+
+        EmitGroundLeafStars(rocket.OriginX, rocket.OriginY);
+        rocket.LastTrailEmitProgress = progress;
+    }
+
+    private void EmitGroundLeafStars(double originX, double originY)
+    {
+        var transitionColor = PickWeightedBurstPalette().Outer;
+        var botanPalette = PickWeightedBurstPalette();
+
+        for (var i = 0; i < GroundLeafStarBurstCount; i++)
+        {
+            var isBotanStar = _random.NextDouble() < 0.5;
+            var kamuroPalette = _kamuroPalettes[_random.Next(_kamuroPalettes.Length)];
+            var baseX = originX + ((_random.NextDouble() - 0.5) * 16);
+            var baseY = originY - (_random.NextDouble() * 10);
+            var yaw = _random.NextDouble() * Math.PI * 2;
+            var lateralSpeed = 132 + (_random.NextDouble() * 56);
+            var speedX = Math.Cos(yaw) * lateralSpeed;
+            var speedZ = Math.Sin(yaw) * lateralSpeed;
+            var speedY = -((148 + _random.NextDouble() * 54) * 5);
+
+            _particles.Add(new Particle
+            {
+                X = baseX,
+                Y = baseY,
+                PrevX = baseX,
+                PrevY = baseY,
+                BurstX = baseX,
+                BurstY = baseY,
+                Kind = isBotanStar ? BurstKind.Botan : BurstKind.Chrysanthemum,
+                Z = 0,
+                PrevZ = 0,
+                Vx = speedX,
+                Vy = speedY,
+                Vz = speedZ,
+                Life = 1,
+                InitialLife = 1,
+                Decay = isBotanStar
+                    ? 0.64 + _random.NextDouble() * 0.14
+                    : 0.57 + _random.NextDouble() * 0.21,
+                Size = isBotanStar
+                    ? 3.0 + _random.NextDouble() * 1.5
+                    : 2.4 + _random.NextDouble() * 1.5,
+                StartColor = isBotanStar ? botanPalette.Shell : kamuroPalette.Shell,
+                EndColor = isBotanStar ? botanPalette.Outer : kamuroPalette.Outer,
+                TransitionColor = isBotanStar ? botanPalette.Outer : transitionColor,
+                TrailStrength = isBotanStar ? 0.8 : 1.45,
+                Drag = isBotanStar
+                    ? 0.958 + _random.NextDouble() * 0.008
+                    : 0.968 + _random.NextDouble() * 0.008,
+                FlickerPhase = _random.NextDouble() * Math.PI * 2,
+                Twinkle = true
+            });
+        }
     }
 
     private void EmitKobanaBursts(Rocket rocket, double progress)
@@ -611,8 +783,13 @@ public partial class FireworkOverlayWindow : Window
         }
     }
 
-    private CurveGuideType PickCurveGuideType()
+    private CurveGuideType PickCurveGuideType(bool preferLeafSplay = false)
     {
+        if (preferLeafSplay)
+        {
+            return CurveGuideType.LeafSplay;
+        }
+
         var roll = _random.NextDouble();
         if (roll < 0.30)
         {
@@ -736,15 +913,17 @@ public partial class FireworkOverlayWindow : Window
 
     private void PrepareEffectStorage()
     {
-        var burstParticles = Math.Max(_settings.ParticleCount * 2, MinimumBurstPetalCount);
+        var capacityShots = Math.Max(StarmineMaxShots, StarmineFixedShots);
+        var burstParticles = Math.Max(_settings.ParticleCount * 2, MinimumBurstPetalCount) * capacityShots;
         var burstTrailCount = burstParticles * EstimatedBurstTrailFrames;
-        var totalParticleCapacity = burstParticles + KobanaCapacityParticleCount;
-        var totalTrailCapacity = LaunchBlastParticleCount + EstimatedRocketTrailCapacity + burstTrailCount;
+        var totalParticleCapacity = burstParticles + (KobanaCapacityParticleCount * capacityShots);
+        var totalTrailCapacity = (LaunchBlastParticleCount * capacityShots) + (EstimatedRocketTrailCapacity * capacityShots) + burstTrailCount;
 
         _particles.EnsureCapacity(totalParticleCapacity);
         _trails.EnsureCapacity(totalTrailCapacity);
         _renderParticles.EnsureCapacity(totalParticleCapacity);
         _renderTrails.EnsureCapacity(totalTrailCapacity);
+        _renderRockets.EnsureCapacity(MaxConcurrentRockets);
     }
 
     private void ClearEffectStorage()
@@ -753,6 +932,7 @@ public partial class FireworkOverlayWindow : Window
         _trails.Clear();
         _renderParticles.Clear();
         _renderTrails.Clear();
+        _renderRockets.Clear();
         _scene.ClearScene();
     }
 
@@ -772,6 +952,7 @@ public partial class FireworkOverlayWindow : Window
     private enum CurveGuideType
     {
         None,
+        LeafSplay,
         SilverDragon,
         Kobana
     }
@@ -781,6 +962,8 @@ public partial class FireworkOverlayWindow : Window
         Charcoal,
         Silver
     }
+
+    private readonly record struct LaunchRequest(double TargetX, double TargetY, double DelaySeconds, bool IsStarmine, double BurstScale = 1.0);
 
     private sealed class Rocket
     {
@@ -794,6 +977,7 @@ public partial class FireworkOverlayWindow : Window
         public double ApexY { get; set; }
         public double Vx { get; set; }
         public double Vy { get; set; }
+        public double HorizontalAccel { get; set; }
         public double SwayPhase { get; set; }
         public double BurstDelay { get; set; }
         public bool FuseHidden { get; set; }
@@ -804,6 +988,11 @@ public partial class FireworkOverlayWindow : Window
         public int KobanaBurstCount { get; set; }
         public double PrevX { get; set; }
         public double PrevY { get; set; }
+        public BurstKind BurstKind { get; set; }
+        public BurstPalette BurstPalette { get; set; } = null!;
+        public BurstPalette ChrysanthemumCharcoalPalette { get; set; } = null!;
+        public SilverDragonTone SilverDragonTone { get; set; }
+        public double BurstScale { get; set; }
     }
 
     private struct Particle

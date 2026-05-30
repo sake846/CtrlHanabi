@@ -17,6 +17,7 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
     private const int PollingIntervalMs = 15;
     private const int DuplicateInputGuardMs = 40;
     private const int DoubleTapCount = 2;
+    private const int TripleTapCount = 3;
     private const int FiveTapCount = 5;
 
     private readonly int _thresholdMs;
@@ -31,6 +32,7 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
     private bool _isRightCtrlDown;
 
     public event EventHandler? DoubleTapDetected;
+    public event EventHandler? TripleTapDetected;
     public event EventHandler? FiveTapDetected;
 
     public KeyboardDoubleTapDetector(int thresholdMs)
@@ -124,6 +126,7 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
     private void ProcessCtrlDown(DateTime now)
     {
         EventHandler? doubleTapDetected = null;
+        EventHandler? tripleTapDetected = null;
         EventHandler? fiveTapDetected = null;
 
         lock (_syncRoot)
@@ -141,6 +144,11 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
                 if (_ctrlTapCount == DoubleTapCount)
                 {
                     doubleTapDetected = DoubleTapDetected;
+                }
+
+                if (_ctrlTapCount == TripleTapCount)
+                {
+                    tripleTapDetected = TripleTapDetected;
                 }
 
                 if (_ctrlTapCount >= FiveTapCount)
@@ -162,6 +170,7 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
         }
 
         doubleTapDetected?.Invoke(this, EventArgs.Empty);
+        tripleTapDetected?.Invoke(this, EventArgs.Empty);
         fiveTapDetected?.Invoke(this, EventArgs.Empty);
     }
 

@@ -60,7 +60,7 @@ internal sealed class ParticleSceneElement : FrameworkElement
 
     private IReadOnlyList<RenderTrail> _trails = Array.Empty<RenderTrail>();
     private IReadOnlyList<RenderParticle> _particles = Array.Empty<RenderParticle>();
-    private RenderRocket? _rocket;
+    private IReadOnlyList<RenderRocket> _rockets = Array.Empty<RenderRocket>();
 
     static ParticleSceneElement()
     {
@@ -70,11 +70,11 @@ internal sealed class ParticleSceneElement : FrameworkElement
         }
     }
 
-    public void UpdateScene(IReadOnlyList<RenderTrail> trails, IReadOnlyList<RenderParticle> particles, RenderRocket? rocket)
+    public void UpdateScene(IReadOnlyList<RenderTrail> trails, IReadOnlyList<RenderParticle> particles, IReadOnlyList<RenderRocket> rockets)
     {
         _trails = trails;
         _particles = particles;
-        _rocket = rocket;
+        _rockets = rockets;
         InvalidateVisual();
     }
 
@@ -82,7 +82,7 @@ internal sealed class ParticleSceneElement : FrameworkElement
     {
         _trails = Array.Empty<RenderTrail>();
         _particles = Array.Empty<RenderParticle>();
-        _rocket = null;
+        _rockets = Array.Empty<RenderRocket>();
         InvalidateVisual();
     }
 
@@ -93,7 +93,7 @@ internal sealed class ParticleSceneElement : FrameworkElement
             DrawFilledCircle(drawingContext, trail.X, trail.Y, trail.Size / 2, CreateBrush(trail.Color, trail.Opacity));
         }
 
-        if (_rocket is RenderRocket rocket)
+        foreach (var rocket in _rockets)
         {
             drawingContext.DrawRoundedRectangle(
                 TubeBodyBrush,

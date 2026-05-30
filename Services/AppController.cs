@@ -4,6 +4,8 @@ using System.Windows;
 using System.Windows.Forms;
 using CtrlHanabi.Models;
 using WpfApplication = System.Windows.Application;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace CtrlHanabi.Services;
 
@@ -19,16 +21,20 @@ public sealed class AppController : IDisposable
     private readonly KeyboardDoubleTapDetector _detector;
     private readonly FireworkOverlayWindow _overlay;
     private readonly NotifyIcon _notifyIcon;
+    private readonly int _tapThresholdMs;
 
     private DateTime _lastTrigger = DateTime.MinValue;
+    private CancellationTokenSource? _doubleTapCts;
 
     public AppController()
     {
         var settings = _settingsService.Load();
+        _tapThresholdMs = settings.DoubleTapThresholdMs;
         _detector = new KeyboardDoubleTapDetector(settings.DoubleTapThresholdMs);
         _overlay = new FireworkOverlayWindow(settings);
 
         _detector.DoubleTapDetected += OnDoubleTapDetected;
+        _detector.TripleTapDetected += OnTripleTapDetected;
         _detector.FiveTapDetected += OnFiveTapDetected;
 
         _notifyIcon = CreateNotifyIcon();
@@ -42,6 +48,15 @@ public sealed class AppController : IDisposable
 
     private void OnDoubleTapDetected(object? sender, EventArgs e)
     {
+        _doubleTapCts?.Cancel();
+        _doubleTapCts = new CancellationTokenSource();
+        _ = FireDoubleTapAfterGraceAsync(_doubleTapCts.Token);
+    }
+
+    private void OnTripleTapDetected(object? sender, EventArgs e)
+    {
+        _doubleTapCts?.Cancel();
+
         var settings = _settingsService.Load();
         if ((DateTime.UtcNow - _lastTrigger).TotalMilliseconds < settings.CooldownMs)
         {
@@ -54,7 +69,38 @@ public sealed class AppController : IDisposable
 
         WpfApplication.Current.Dispatcher.Invoke(() =>
         {
-            _overlay.ShowFirework(mouse);
+            _overlay.ShowFirework(mouse, forceStarmine: true);
+        });
+    }
+
+    private async Task FireDoubleTapAfterGraceAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(_tapThresholdMs + 10, cancellationToken);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        var settings = _settingsService.Load();
+        if ((DateTime.UtcNow - _lastTrigger).TotalMilliseconds < settings.CooldownMs)
+        {
+            return;
+        }
+
+        _lastTrigger = DateTime.UtcNow;
+        var mouse = NativeMethods.GetCursorScreenPoint();
+
+        WpfApplication.Current.Dispatcher.Invoke(() =>
+        {
+            _overlay.ShowFirework(mouse, forceStarmine: false);
         });
     }
 
