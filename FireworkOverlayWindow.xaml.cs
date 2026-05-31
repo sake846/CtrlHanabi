@@ -30,6 +30,8 @@ public partial class FireworkOverlayWindow : Window
     private const int KobanaCapacityParticleCount = 36;
     private const int EstimatedRocketTrailCapacity = 80;
     private const int EstimatedBurstTrailFrames = 72;
+    private const int MaxParticleTrailSegments = 4;
+    private const int MaxRocketTrailSegments = 8;
     private static readonly double[] KobanaBurstProgressThresholds = [0.50, 0.68, 0.82];
     private const double StarmineChance = 0.55;
     private const int StarmineMinShots = 4;
@@ -60,6 +62,7 @@ public partial class FireworkOverlayWindow : Window
     private readonly List<RenderTrail> _renderTrails = [];
     private readonly List<RenderParticle> _renderParticles = [];
     private readonly List<RenderRocket> _renderRockets = [];
+    private readonly GpuParticlePhysics _gpuParticlePhysics = new();
     private readonly Random _random = new();
     private readonly Services.SettingsService _settingsService = new();
     private readonly ParticleSceneElement _scene = new();
@@ -145,6 +148,21 @@ public partial class FireworkOverlayWindow : Window
 
     private void UpdateFrame()
     {
+        try
+        {
+            UpdateFrameCore();
+        }
+        catch (Exception ex)
+        {
+            LogOverlayFailure("UpdateFrame failed: " + ex);
+            _timer.Stop();
+            _gpuParticlePhysics.Reset();
+            Hide();
+        }
+    }
+
+    private void UpdateFrameCore()
+    {
         if (_isStarmineActive && _activeRockets.Count == 0 && _launchQueue.Count == 0)
         {
             _isStarmineActive = false;
@@ -170,15 +188,13 @@ public partial class FireworkOverlayWindow : Window
 
         UpdateRockets();
         UpdateParticles();
-        RenderFrame();
-
-        if (_activeRockets.Count == 0 && _launchQueue.Count == 0 && !_particles.Any() && !_trails.Any())
+        if (_activeRockets.Count == 0 && _launchQueue.Count == 0 && _particles.Count == 0 && _trails.Count == 0)
         {
-            _isStarmineActive = false;
-            _timer.Stop();
-            _scene.ClearScene();
-            Hide();
+            StopEffect();
+            return;
         }
+
+        RenderFrame();
     }
 
     private void UpdateRockets()
@@ -413,79 +429,112 @@ public partial class FireworkOverlayWindow : Window
 
     private void UpdateParticles()
     {
+        var gpuIntegratedParticleCount = _gpuParticlePhysics.TryApplyPending(_particles);
+        var particleCountBeforeUpdate = _particles.Count;
+        var particleWriteIndex = _particles.Count - 1;
         for (var i = _particles.Count - 1; i >= 0; i--)
         {
             var p = _particles[i];
             var age = 1 - (p.Life / p.InitialLife);
-            p.PrevX = p.X;
-            p.PrevY = p.Y;
-            p.PrevZ = p.Z;
-            p.Vy += (82 + age * 20) * FrameDeltaSeconds;
-            p.Vx *= p.Drag;
-            p.Vy *= p.Drag;
-            p.Vz *= p.Drag;
-            p.X += p.Vx * FrameDeltaSeconds;
-            p.Y += p.Vy * FrameDeltaSeconds;
-            p.Z = Math.Clamp(p.Z + p.Vz * FrameDeltaSeconds, -MaxDepthOffset, MaxDepthOffset);
-            p.Life -= FrameDeltaSeconds * p.Decay;
-
-            var color = GetParticleColor(p, age);
-            var trailLife = p.Kind == BurstKind.KamuroGiku
-                ? p.Life * (0.3 + p.TrailStrength * 1.05)
-                : p.Life * (0.3 + p.TrailStrength * 0.2);
-            var trailSize = p.Kind == BurstKind.KamuroGiku
-                ? p.Size * (0.30 + p.TrailStrength * 0.032)
-                : p.Size * (0.92 + p.TrailStrength * 0.14);
-            var dx = p.X - p.PrevX;
-            var dy = p.Y - p.PrevY;
-            var distance = Math.Sqrt((dx * dx) + (dy * dy));
-            var segmentSpacing = Math.Max(1.35, trailSize * 0.55);
-            var segments = Math.Max(1, (int)Math.Ceiling(distance / segmentSpacing));
-            for (var segment = 1; segment <= segments; segment++)
+            if (i >= gpuIntegratedParticleCount)
             {
-                var segmentT = segment / (double)segments;
-                _trails.Add(new TrailParticle(
-                    p.PrevX + (dx * segmentT),
-                    p.PrevY + (dy * segmentT),
-                    p.PrevZ + ((p.Z - p.PrevZ) * segmentT),
-                    p.BurstX,
-                    p.BurstY,
-                    trailLife * (0.9 + segmentT * 0.1),
-                    trailSize,
-                    WithAlpha(color, 168)));
+                p.PrevX = p.X;
+                p.PrevY = p.Y;
+                p.PrevZ = p.Z;
+                p.Vy += (82 + age * 20) * FrameDeltaSeconds;
+                p.Vx *= p.Drag;
+                p.Vy *= p.Drag;
+                p.Vz *= p.Drag;
+                p.X += p.Vx * FrameDeltaSeconds;
+                p.Y += p.Vy * FrameDeltaSeconds;
+                p.Z = Math.Clamp(p.Z + p.Vz * FrameDeltaSeconds, -MaxDepthOffset, MaxDepthOffset);
+                p.Life -= FrameDeltaSeconds * p.Decay;
             }
 
-            if (p.Life <= 0)
+            if (p.Life > 0)
             {
-                _particles.RemoveAt(i);
-            }
-            else
-            {
-                _particles[i] = p;
+                age = 1 - (p.Life / p.InitialLife);
+                var color = GetParticleColor(p, age);
+                p.Age = age;
+                p.CurrentColor = color;
+                var botanBloom = p.Kind == BurstKind.Botan ? GetBotanBloomFactor(age) : 1;
+                var kamuroGlow = p.Kind == BurstKind.KamuroGiku ? GetKamuroGlowFactor(age) : 1;
+                var centerFade = p.Kind == BurstKind.KamuroGiku ? GetKamuroCenterFadeFactor(p, age) : 1;
+                var softFade = p.Kind == BurstKind.KamuroGiku ? GetKamuroSoftFade(age) : 1;
+                var lifeFactor = p.Kind == BurstKind.KamuroGiku
+                    ? Math.Clamp((p.Life * 0.7) + (centerFade * 0.3), 0, 1)
+                    : p.Life;
+                var fadeBase = lifeFactor * botanBloom * kamuroGlow * centerFade * softFade;
+                p.CurrentCoreColor = LerpColor(color, p.TransitionColor, 0.3 + age * 0.2);
+                p.RenderGlowSize = p.Size * (2.25 - age * 0.2) * kamuroGlow;
+                p.RenderCoreSize = p.Size * (0.92 - age * 0.05) * (0.92 + kamuroGlow * 0.08);
+                p.RenderGlowOpacityBase = fadeBase * 0.11;
+                p.RenderCoreOpacityBase = fadeBase * 0.68;
+                var trailLife = p.Kind == BurstKind.KamuroGiku
+                    ? p.Life * (0.3 + p.TrailStrength * 1.05)
+                    : p.Life * (0.3 + p.TrailStrength * 0.2);
+                var trailSize = p.Kind == BurstKind.KamuroGiku
+                    ? p.Size * (0.30 + p.TrailStrength * 0.032)
+                    : p.Size * (0.92 + p.TrailStrength * 0.14);
+                var dx = p.X - p.PrevX;
+                var dy = p.Y - p.PrevY;
+                var distance = Math.Sqrt((dx * dx) + (dy * dy));
+                var segmentSpacing = Math.Max(1.35, trailSize * 0.55);
+                var segments = Math.Clamp((int)Math.Ceiling(distance / segmentSpacing), 1, MaxParticleTrailSegments);
+                var segmentStep = 1.0 / segments;
+                var trailColor = WithAlpha(color, 168);
+                for (var segment = 1; segment <= segments; segment++)
+                {
+                    var segmentT = segment * segmentStep;
+                    _trails.Add(new TrailParticle(
+                        p.PrevX + (dx * segmentT),
+                        p.PrevY + (dy * segmentT),
+                        p.PrevZ + ((p.Z - p.PrevZ) * segmentT),
+                        p.BurstX,
+                        p.BurstY,
+                        trailLife * (0.9 + segmentT * 0.1),
+                        trailSize,
+                        trailColor));
+                }
+
+                _particles[particleWriteIndex--] = p;
             }
         }
 
-        for (var i = _trails.Count - 1; i >= 0; i--)
+        if (particleWriteIndex >= 0)
+        {
+            _particles.RemoveRange(0, particleWriteIndex + 1);
+        }
+
+        var canReuseGpuParticleBuffer = gpuIntegratedParticleCount == particleCountBeforeUpdate
+            && _particles.Count == particleCountBeforeUpdate;
+        _gpuParticlePhysics.ScheduleUpdate(_particles, FrameDeltaSeconds, MaxDepthOffset, canReuseGpuParticleBuffer);
+
+        var trailWriteIndex = 0;
+        for (var i = 0; i < _trails.Count; i++)
         {
             var t = _trails[i];
             t.Life -= FrameDeltaSeconds * 1.2;
             t.Size *= 0.992;
-            if (t.Life <= 0 || t.Size <= 0.8)
+            if (t.Life > 0 && t.Size > 0.8)
             {
-                _trails.RemoveAt(i);
+                _trails[trailWriteIndex++] = t;
             }
-            else
-            {
-                _trails[i] = t;
-            }
+        }
+
+        if (trailWriteIndex < _trails.Count)
+        {
+            _trails.RemoveRange(trailWriteIndex, _trails.Count - trailWriteIndex);
         }
     }
 
     private void RenderFrame()
     {
         _renderTrails.Clear();
-        foreach (var t in _trails)
+        _renderTrails.EnsureCapacity(_trails.Count);
+        for (var i = 0; i < _trails.Count; i++)
         {
+            var t = _trails[i];
             var perspective = GetPerspectiveScale(t.Z);
             var projectedX = t.BurstX + ((t.X - t.BurstX) * perspective);
             var projectedY = t.BurstY + ((t.Y - t.BurstY) * perspective);
@@ -493,35 +542,32 @@ public partial class FireworkOverlayWindow : Window
         }
 
         _renderParticles.Clear();
-        foreach (var p in _particles)
+        _renderParticles.EnsureCapacity(_particles.Count);
+        var shimmerTime = _started.Ticks / (double)TimeSpan.TicksPerSecond * 7;
+        for (var i = 0; i < _particles.Count; i++)
         {
-            var age = 1 - (p.Life / p.InitialLife);
-            var color = GetParticleColor(p, age);
-            var shimmer = p.Twinkle ? 0.86 + 0.14 * Math.Sin((_started.Ticks / (double)TimeSpan.TicksPerSecond * 7) + p.FlickerPhase + age * 18) : 1;
+            var p = _particles[i];
+            var age = p.Age;
+            var shimmer = p.Twinkle ? 0.86 + 0.14 * Math.Sin(shimmerTime + p.FlickerPhase + age * 18) : 1;
             var perspective = GetPerspectiveScale(p.Z);
             var projectedX = p.BurstX + ((p.X - p.BurstX) * perspective);
             var projectedY = p.BurstY + ((p.Y - p.BurstY) * perspective);
-            var botanBloom = p.Kind == BurstKind.Botan ? GetBotanBloomFactor(age) : 1;
-            var kamuroGlow = p.Kind == BurstKind.KamuroGiku ? GetKamuroGlowFactor(age) : 1;
-            var centerFade = p.Kind == BurstKind.KamuroGiku ? GetKamuroCenterFadeFactor(p, age) : 1;
-            var softFade = p.Kind == BurstKind.KamuroGiku ? GetKamuroSoftFade(age) : 1;
-            var lifeFactor = p.Kind == BurstKind.KamuroGiku
-                ? Math.Clamp((p.Life * 0.7) + (centerFade * 0.3), 0, 1)
-                : p.Life;
             _renderParticles.Add(new RenderParticle(
                 projectedX,
                 projectedY,
-                p.Size * (2.25 - age * 0.2) * kamuroGlow,
-                p.Size * (0.92 - age * 0.05) * (0.92 + kamuroGlow * 0.08),
-                color,
-                LerpColor(color, p.TransitionColor, 0.3 + age * 0.2),
-                lifeFactor * 0.11 * shimmer * botanBloom * kamuroGlow * centerFade * softFade,
-                Math.Clamp(lifeFactor * 0.68 * shimmer * botanBloom * kamuroGlow * centerFade * softFade, 0, 1)));
+                p.RenderGlowSize,
+                p.RenderCoreSize,
+                p.CurrentColor,
+                p.CurrentCoreColor,
+                p.RenderGlowOpacityBase * shimmer,
+                Math.Clamp(p.RenderCoreOpacityBase * shimmer, 0, 1)));
         }
 
         _renderRockets.Clear();
-        foreach (var rocket in _activeRockets)
+        _renderRockets.EnsureCapacity(_activeRockets.Count);
+        for (var i = 0; i < _activeRockets.Count; i++)
         {
+            var rocket = _activeRockets[i];
             _renderRockets.Add(new RenderRocket(rocket.X, rocket.Y, rocket.OriginX, rocket.OriginY, rocket.TrailColor, rocket.FuseHidden));
         }
 
@@ -529,6 +575,15 @@ public partial class FireworkOverlayWindow : Window
             _renderTrails,
             _renderParticles,
             _renderRockets);
+    }
+
+    private void StopEffect()
+    {
+        _isStarmineActive = false;
+        _timer.Stop();
+        _gpuParticlePhysics.Reset();
+        _scene.ClearScene();
+        Hide();
     }
 
     private void ApplyVirtualScreenBounds()
@@ -547,9 +602,31 @@ public partial class FireworkOverlayWindow : Window
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e) => ApplyVirtualScreenBounds();
 
+    private static void LogOverlayFailure(string message)
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable("CTRLHANABI_D3D11_LOG"), "1", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        try
+        {
+            var logPath = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "CtrlHanabi",
+                "d3d11.log");
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(logPath)!);
+            System.IO.File.AppendAllText(logPath, $"{DateTime.Now:O} {message}{Environment.NewLine}");
+        }
+        catch
+        {
+        }
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+        _gpuParticlePhysics.Dispose();
         base.OnClosed(e);
     }
 
@@ -649,7 +726,7 @@ public partial class FireworkOverlayWindow : Window
         var dx = rocket.X - rocket.PrevX;
         var dy = rocket.Y - rocket.PrevY;
         var distance = Math.Sqrt((dx * dx) + (dy * dy));
-        var steps = Math.Max(1, (int)Math.Ceiling(distance / 2.8));
+        var steps = Math.Clamp((int)Math.Ceiling(distance / 2.8), 1, MaxRocketTrailSegments);
         for (var i = 1; i <= steps; i++)
         {
             var t = i / (double)steps;
@@ -928,6 +1005,7 @@ public partial class FireworkOverlayWindow : Window
 
     private void ClearEffectStorage()
     {
+        _gpuParticlePhysics.Reset();
         _particles.Clear();
         _trails.Clear();
         _renderParticles.Clear();
@@ -1016,6 +1094,13 @@ public partial class FireworkOverlayWindow : Window
         public WpfColor StartColor { get; set; }
         public WpfColor EndColor { get; set; }
         public WpfColor TransitionColor { get; set; }
+        public WpfColor CurrentColor { get; set; }
+        public WpfColor CurrentCoreColor { get; set; }
+        public double Age { get; set; }
+        public double RenderGlowSize { get; set; }
+        public double RenderCoreSize { get; set; }
+        public double RenderGlowOpacityBase { get; set; }
+        public double RenderCoreOpacityBase { get; set; }
         public double TrailStrength { get; set; }
         public double Drag { get; set; }
         public double FlickerPhase { get; set; }

@@ -58,9 +58,11 @@ internal sealed class ParticleSceneElement : FrameworkElement
     private static readonly WpfBrush RocketDimCoreBrush = CreateFrozenBrush(WpfColor.FromArgb(200, 255, 215, 0));
     private static readonly WpfBrush RocketDimGlowBrush = CreateFrozenBrush(WpfColor.FromArgb(110, 255, 245, 225));
 
-    private IReadOnlyList<RenderTrail> _trails = Array.Empty<RenderTrail>();
-    private IReadOnlyList<RenderParticle> _particles = Array.Empty<RenderParticle>();
-    private IReadOnlyList<RenderRocket> _rockets = Array.Empty<RenderRocket>();
+    private List<RenderTrail> _trails = [];
+    private List<RenderParticle> _particles = [];
+    private List<RenderRocket> _rockets = [];
+    private readonly D3DParticleRenderer _particleRenderer = new();
+    private bool _renderedWithGpu;
 
     static ParticleSceneElement()
     {
@@ -70,27 +72,41 @@ internal sealed class ParticleSceneElement : FrameworkElement
         }
     }
 
-    public void UpdateScene(IReadOnlyList<RenderTrail> trails, IReadOnlyList<RenderParticle> particles, IReadOnlyList<RenderRocket> rockets)
+    public ParticleSceneElement()
+    {
+        Unloaded += (_, _) => _particleRenderer.Dispose();
+    }
+
+    public void UpdateScene(List<RenderTrail> trails, List<RenderParticle> particles, List<RenderRocket> rockets)
     {
         _trails = trails;
         _particles = particles;
         _rockets = rockets;
+        _renderedWithGpu = _particleRenderer.Render(this, _trails, _particles);
         InvalidateVisual();
     }
 
     public void ClearScene()
     {
-        _trails = Array.Empty<RenderTrail>();
-        _particles = Array.Empty<RenderParticle>();
-        _rockets = Array.Empty<RenderRocket>();
+        _trails = [];
+        _particles = [];
+        _rockets = [];
+        _renderedWithGpu = false;
         InvalidateVisual();
     }
 
     protected override void OnRender(DrawingContext drawingContext)
     {
-        foreach (var trail in _trails)
+        if (_renderedWithGpu)
         {
-            DrawFilledCircle(drawingContext, trail.X, trail.Y, trail.Size / 2, CreateBrush(trail.Color, trail.Opacity));
+            drawingContext.DrawImage(_particleRenderer.Image, new Rect(0, 0, ActualWidth, ActualHeight));
+        }
+        else
+        {
+            foreach (var trail in _trails)
+            {
+                DrawFilledCircle(drawingContext, trail.X, trail.Y, trail.Size / 2, CreateBrush(trail.Color, trail.Opacity));
+            }
         }
 
         foreach (var rocket in _rockets)
@@ -120,10 +136,13 @@ internal sealed class ParticleSceneElement : FrameworkElement
             }
         }
 
-        foreach (var particle in _particles)
+        if (!_renderedWithGpu)
         {
-            DrawFilledCircle(drawingContext, particle.X, particle.Y, particle.GlowSize / 2, CreateBrush(particle.GlowColor, particle.GlowOpacity));
-            DrawFilledCircle(drawingContext, particle.X, particle.Y, particle.CoreSize / 2, CreateBrush(particle.CoreColor, particle.CoreOpacity));
+            foreach (var particle in _particles)
+            {
+                DrawFilledCircle(drawingContext, particle.X, particle.Y, particle.GlowSize / 2, CreateBrush(particle.GlowColor, particle.GlowOpacity));
+                DrawFilledCircle(drawingContext, particle.X, particle.Y, particle.CoreSize / 2, CreateBrush(particle.CoreColor, particle.CoreOpacity));
+            }
         }
     }
 
