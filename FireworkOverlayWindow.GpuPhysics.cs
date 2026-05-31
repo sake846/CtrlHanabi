@@ -69,6 +69,7 @@ public partial class FireworkOverlayWindow
         private D3D11DeviceContext? _context;
         private D3D11ComputeShader? _computeShader;
         private D3D11Buffer? _particleBuffer;
+        private D3D11Buffer? _uploadBuffer;
         private D3D11Buffer? _stagingBuffer;
         private D3D11Buffer? _paramsBuffer;
         private D3D11UnorderedAccessView? _particleUav;
@@ -172,7 +173,7 @@ public partial class FireworkOverlayWindow
                 }
 
                 EnsureBuffers(particles.Count);
-                if (_particleBuffer is null || _stagingBuffer is null || _paramsBuffer is null || _particleUav is null)
+                if (_particleBuffer is null || _uploadBuffer is null || _stagingBuffer is null || _paramsBuffer is null || _particleUav is null)
                 {
                     return;
                 }
@@ -199,8 +200,8 @@ public partial class FireworkOverlayWindow
                             (float)p.Decay,
                             (float)p.Drag));
                     }
-
-                    _context.UpdateBuffer(_particleBuffer, CollectionsMarshal.AsSpan(_uploadParticles));
+                    _context.WriteBuffer(_uploadBuffer, CollectionsMarshal.AsSpan(_uploadParticles));
+                    _context.CopyResource(_particleBuffer, _uploadBuffer);
                 }
 
                 var parameters = new ComputeParams((uint)particles.Count, (float)dt, (float)maxDepth, 0);
@@ -250,26 +251,32 @@ public partial class FireworkOverlayWindow
                 return;
             }
 
+            _context?.UnsetComputeUnorderedAccessView();
             _particleUav?.Dispose();
             _particleBuffer?.Dispose();
+            _uploadBuffer?.Dispose();
             _stagingBuffer?.Dispose();
             _paramsBuffer?.Dispose();
             _capacity = Math.Max(count, _capacity == 0 ? 1024 : _capacity * 2);
             var byteWidth = (uint)(_capacity * Marshal.SizeOf<GpuParticle>());
             _particleBuffer = _device.CreateStructuredBuffer(byteWidth, (uint)Marshal.SizeOf<GpuParticle>());
             _particleUav = _device.CreateUnorderedAccessView(_particleBuffer);
+            _uploadBuffer = _device.CreateUploadBuffer(byteWidth, (uint)Marshal.SizeOf<GpuParticle>());
             _stagingBuffer = _device.CreateStagingBuffer(byteWidth, (uint)Marshal.SizeOf<GpuParticle>());
             _paramsBuffer = _device.CreateConstantBuffer((uint)Marshal.SizeOf<ComputeParams>());
         }
 
         private void Release()
         {
+            _context?.UnsetComputeUnorderedAccessView();
             _particleUav?.Dispose();
             _particleUav = null;
             _paramsBuffer?.Dispose();
             _paramsBuffer = null;
             _stagingBuffer?.Dispose();
             _stagingBuffer = null;
+            _uploadBuffer?.Dispose();
+            _uploadBuffer = null;
             _particleBuffer?.Dispose();
             _particleBuffer = null;
             _computeShader?.Dispose();
@@ -334,9 +341,11 @@ public partial class FireworkOverlayWindow
         public const uint BindUnorderedAccess = 0x80;
         public const uint UsageDefault = 0;
         public const uint UsageStaging = 3;
+        public const uint CpuAccessWrite = 0x10000;
         public const uint CpuAccessRead = 0x20000;
         public const uint ResourceMiscBufferStructured = 0x40;
         public const uint MapRead = 1;
+        public const uint MapWrite = 2;
         public const uint MapFlagDoNotWait = 0x100000;
         public const int DxgiErrorWasStillDrawing = unchecked((int)0x887A000A);
 
@@ -458,6 +467,9 @@ public partial class FireworkOverlayWindow
         public D3D11Buffer CreateStagingBuffer(uint byteWidth, uint stride)
             => CreateBuffer(new BufferDesc { ByteWidth = byteWidth, Usage = D3D11.UsageStaging, CpuAccessFlags = D3D11.CpuAccessRead, MiscFlags = D3D11.ResourceMiscBufferStructured, StructureByteStride = stride });
 
+        public D3D11Buffer CreateUploadBuffer(uint byteWidth, uint stride)
+            => CreateBuffer(new BufferDesc { ByteWidth = byteWidth, Usage = D3D11.UsageStaging, CpuAccessFlags = D3D11.CpuAccessWrite, MiscFlags = D3D11.ResourceMiscBufferStructured, StructureByteStride = stride });
+
         public D3D11Buffer CreateConstantBuffer(uint byteWidth)
             => CreateBuffer(new BufferDesc { ByteWidth = (byteWidth + 15) & ~15u, Usage = D3D11.UsageDefault, BindFlags = D3D11.BindConstantBuffer });
 
@@ -502,6 +514,23 @@ public partial class FireworkOverlayWindow
         public void UpdateValue<T>(D3D11Buffer buffer, T value) where T : unmanaged
             => UpdateSubresource(buffer, (nint)(&value), (uint)sizeof(T));
 
+        public void WriteBuffer<T>(D3D11Buffer buffer, ReadOnlySpan<T> values) where T : unmanaged
+        {
+            var byteWidth = (uint)(values.Length * sizeof(T));
+            var mapped = MapWrite(buffer);
+            try
+            {
+                fixed (T* source = values)
+                {
+                    Buffer.MemoryCopy(source, (void*)mapped.DataPointer, byteWidth, byteWidth);
+                }
+            }
+            finally
+            {
+                Unmap(buffer);
+            }
+        }
+
         public bool TryMapRead(D3D11Buffer buffer, out MappedSubresource mapped)
         {
             MappedSubresource localMapped = default;
@@ -517,6 +546,15 @@ public partial class FireworkOverlayWindow
             D3D11.ThrowIfFailed(result);
             mapped = localMapped;
             return true;
+        }
+
+        private MappedSubresource MapWrite(D3D11Buffer buffer)
+        {
+            MappedSubresource mapped = default;
+            var vtable = *(nint**)NativePointer;
+            var map = (delegate* unmanaged[Stdcall]<nint, nint, uint, uint, uint, MappedSubresource*, int>)vtable[14];
+            D3D11.ThrowIfFailed(map(NativePointer, buffer.NativePointer, 0, D3D11.MapWrite, 0, &mapped));
+            return mapped;
         }
 
         public void Unmap(D3D11Buffer buffer)

@@ -38,14 +38,15 @@ public partial class FireworkOverlayWindow : Window
     private const int StarmineMaxShots = 7;
     private const int StarmineFixedShots = 20;
     private const double StarmineBaseIntervalSeconds = 0.2;
-    private const double StarmineIntervalJitterSeconds = 0.04;
+    private const double StarmineIntervalJitterSeconds = 0.2;
     private const double StarmineLastPairGapSeconds = 0.05;
     private const double LeafAscentEmitProgressStep = 0.064;
-    private const double GroundLeafContinuousIntervalSeconds = 0.064;
-    private const int GroundLeafStarBurstCount = 1;
+    private const int GroundLeafStarBurstCount = 8;
     private const double StarmineLaunchAngleJitter = 50;
     private const double SingleLaunchAngleJitter = 10;
-    private const int MaxConcurrentRockets = 5;
+    private const int MaxConcurrentRockets = 15;
+    private const bool DisableGpuPhysicsDuringStarmine = false;
+    private static readonly double[] StarmineLaunchXFractions = [0.25, 0.5, 0.75];
 
     private const int GwlExStyle = -20;
     private const int WsExTransparent = 0x00000020;
@@ -89,9 +90,6 @@ public partial class FireworkOverlayWindow : Window
     private readonly Queue<LaunchRequest> _launchQueue = new();
     private double _launchDelay;
     private bool _isStarmineActive;
-    private double _starmineGroundX;
-    private double _starmineGroundY;
-    private double _groundLeafCooldown;
 
     public FireworkOverlayWindow(HanabiSettings settings)
     {
@@ -171,21 +169,11 @@ public partial class FireworkOverlayWindow : Window
         if (_launchQueue.Count > 0)
         {
             _launchDelay -= FrameDeltaSeconds;
-            if (_launchDelay <= 0 && _activeRockets.Count < MaxConcurrentRockets)
+            while (_launchDelay <= 0 && _activeRockets.Count < MaxConcurrentRockets && _launchQueue.Count > 0)
             {
                 SpawnNextLaunch();
             }
         }
-        else if (_isStarmineActive && _activeRockets.Count == 0)
-        {
-            _groundLeafCooldown -= FrameDeltaSeconds;
-            if (_groundLeafCooldown <= 0)
-            {
-                EmitGroundLeafStars(_starmineGroundX, _starmineGroundY);
-                _groundLeafCooldown = GroundLeafContinuousIntervalSeconds;
-            }
-        }
-
         UpdateRockets();
         UpdateParticles();
         if (_activeRockets.Count == 0 && _launchQueue.Count == 0 && _particles.Count == 0 && _trails.Count == 0)
@@ -263,13 +251,9 @@ public partial class FireworkOverlayWindow : Window
         }
 
         _isStarmineActive = true;
-        var centerX = Width * 0.5;
-        _starmineGroundX = centerX;
-        _starmineGroundY = GetLaunchY(new WpfPoint(Left + centerX, Top + (Height * 0.5)));
-        _groundLeafCooldown = 0;
         for (var i = 0; i < StarmineFixedShots; i++)
         {
-            var delay = i switch
+            var waveDelay = i switch
             {
                 0 => 0,
                 19 => StarmineLastPairGapSeconds,
@@ -286,7 +270,28 @@ public partial class FireworkOverlayWindow : Window
                 : i < 15
                     ? 1.5
                     : 2.0;
-            _launchQueue.Enqueue(new LaunchRequest(centerX, targetY, delay, true, burstScale));
+
+            var laneOrder = new int[StarmineLaunchXFractions.Length];
+            for (var lane = 0; lane < laneOrder.Length; lane++)
+            {
+                laneOrder[lane] = lane;
+            }
+
+            for (var lane = laneOrder.Length - 1; lane > 0; lane--)
+            {
+                var swapIndex = _random.Next(lane + 1);
+                (laneOrder[lane], laneOrder[swapIndex]) = (laneOrder[swapIndex], laneOrder[lane]);
+            }
+
+            for (var orderIndex = 0; orderIndex < laneOrder.Length; orderIndex++)
+            {
+                var lane = laneOrder[orderIndex];
+                var targetX = Width * StarmineLaunchXFractions[lane];
+                var delay = orderIndex == 0
+                    ? waveDelay
+                    : _random.NextDouble() * StarmineIntervalJitterSeconds;
+                _launchQueue.Enqueue(new LaunchRequest(targetX, targetY, delay, true, burstScale));
+            }
         }
     }
 
@@ -340,15 +345,19 @@ public partial class FireworkOverlayWindow : Window
             BurstPalette = burstPalette,
             ChrysanthemumCharcoalPalette = chrysanthemumCharcoalPalette,
             SilverDragonTone = silverDragonTone,
+            IsStarmine = launch.IsStarmine,
             BurstScale = launch.BurstScale
         });
 
         EmitLaunchBlast(startX, launchY);
+        if (launch.IsStarmine)
+        {
+            EmitGroundLeafStars(startX, launchY);
+        }
         if (launch.IsStarmine && _launchQueue.Count > 0)
         {
             var nextDelay = _launchQueue.Peek().DelaySeconds;
-            var jitter = _random.NextDouble() * StarmineIntervalJitterSeconds;
-            _launchDelay = nextDelay + jitter;
+            _launchDelay = nextDelay;
         }
         else
         {
@@ -429,7 +438,15 @@ public partial class FireworkOverlayWindow : Window
 
     private void UpdateParticles()
     {
-        var gpuIntegratedParticleCount = _gpuParticlePhysics.TryApplyPending(_particles);
+        var useGpuPhysics = !_isStarmineActive || !DisableGpuPhysicsDuringStarmine;
+        if (!useGpuPhysics)
+        {
+            _gpuParticlePhysics.Reset();
+        }
+
+        var gpuIntegratedParticleCount = useGpuPhysics
+            ? _gpuParticlePhysics.TryApplyPending(_particles)
+            : 0;
         var particleCountBeforeUpdate = _particles.Count;
         var particleWriteIndex = _particles.Count - 1;
         for (var i = _particles.Count - 1; i >= 0; i--)
@@ -506,9 +523,12 @@ public partial class FireworkOverlayWindow : Window
             _particles.RemoveRange(0, particleWriteIndex + 1);
         }
 
-        var canReuseGpuParticleBuffer = gpuIntegratedParticleCount == particleCountBeforeUpdate
-            && _particles.Count == particleCountBeforeUpdate;
-        _gpuParticlePhysics.ScheduleUpdate(_particles, FrameDeltaSeconds, MaxDepthOffset, canReuseGpuParticleBuffer);
+        if (useGpuPhysics)
+        {
+            var canReuseGpuParticleBuffer = gpuIntegratedParticleCount == particleCountBeforeUpdate
+                && _particles.Count == particleCountBeforeUpdate;
+            _gpuParticlePhysics.ScheduleUpdate(_particles, FrameDeltaSeconds, MaxDepthOffset, canReuseGpuParticleBuffer);
+        }
 
         var trailWriteIndex = 0;
         for (var i = 0; i < _trails.Count; i++)
@@ -750,6 +770,11 @@ public partial class FireworkOverlayWindow : Window
 
     private void EmitLeafSplayTrail(Rocket rocket, double progress)
     {
+        if (rocket.IsStarmine)
+        {
+            return;
+        }
+
         if ((progress - rocket.LastTrailEmitProgress) < LeafAscentEmitProgressStep)
         {
             return;
@@ -769,12 +794,12 @@ public partial class FireworkOverlayWindow : Window
             var isBotanStar = _random.NextDouble() < 0.5;
             var kamuroPalette = _kamuroPalettes[_random.Next(_kamuroPalettes.Length)];
             var baseX = originX + ((_random.NextDouble() - 0.5) * 16);
-            var baseY = originY - (_random.NextDouble() * 10);
+            var baseY = originY - (_random.NextDouble() * 1.5);
             var yaw = _random.NextDouble() * Math.PI * 2;
             var lateralSpeed = 132 + (_random.NextDouble() * 56);
             var speedX = Math.Cos(yaw) * lateralSpeed;
             var speedZ = Math.Sin(yaw) * lateralSpeed;
-            var speedY = -((148 + _random.NextDouble() * 54) * 5);
+            var speedY = -((176 + _random.NextDouble() * 6) * 5);
 
             _particles.Add(new Particle
             {
@@ -990,7 +1015,8 @@ public partial class FireworkOverlayWindow : Window
 
     private void PrepareEffectStorage()
     {
-        var capacityShots = Math.Max(StarmineMaxShots, StarmineFixedShots);
+        var starmineQueuedShots = StarmineFixedShots * StarmineLaunchXFractions.Length;
+        var capacityShots = Math.Max(StarmineMaxShots, starmineQueuedShots);
         var burstParticles = Math.Max(_settings.ParticleCount * 2, MinimumBurstPetalCount) * capacityShots;
         var burstTrailCount = burstParticles * EstimatedBurstTrailFrames;
         var totalParticleCapacity = burstParticles + (KobanaCapacityParticleCount * capacityShots);
@@ -1070,6 +1096,7 @@ public partial class FireworkOverlayWindow : Window
         public BurstPalette BurstPalette { get; set; } = null!;
         public BurstPalette ChrysanthemumCharcoalPalette { get; set; } = null!;
         public SilverDragonTone SilverDragonTone { get; set; }
+        public bool IsStarmine { get; set; }
         public double BurstScale { get; set; }
     }
 

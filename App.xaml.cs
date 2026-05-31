@@ -1,6 +1,8 @@
 using WpfApplication = System.Windows.Application;
 using System.Windows;
 using System.Threading;
+using System.Diagnostics;
+using System.IO;
 using CtrlHanabi.Services;
 
 namespace CtrlHanabi;
@@ -14,6 +16,8 @@ public partial class App : WpfApplication
 
     private void OnStartup(object sender, StartupEventArgs e)
     {
+        EnsureDefaultRuntimeFlags();
+        WriteStartupDiagnostics();
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         if (!TryAcquireSingleInstanceMutex())
         {
@@ -49,5 +53,64 @@ public partial class App : WpfApplication
         _singleInstanceMutex?.ReleaseMutex();
         _singleInstanceMutex?.Dispose();
         _singleInstanceMutex = null;
+    }
+
+    private static void WriteStartupDiagnostics()
+    {
+        try
+        {
+            var logPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "CtrlHanabi",
+                "d3d11.log");
+            Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+
+            var process = Process.GetCurrentProcess();
+            var lines = new[]
+            {
+                "==== Startup Diagnostics ====",
+                $"Time: {DateTime.Now:O}",
+                $"ProcessPath: {Environment.ProcessPath ?? "(null)"}",
+                $"MainModule: {process.MainModule?.FileName ?? "(null)"}",
+                $"BaseDirectory: {AppContext.BaseDirectory}",
+                $"CurrentDirectory: {Environment.CurrentDirectory}",
+                $"CommandLine: {Environment.CommandLine}",
+                $"Runtime: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}",
+                $"OS: {System.Runtime.InteropServices.RuntimeInformation.OSDescription}",
+                $"BuildConfig: {GetBuildConfiguration()}",
+                $"CTRLHANABI_D3D11: {Environment.GetEnvironmentVariable("CTRLHANABI_D3D11") ?? "(unset)"}",
+                $"CTRLHANABI_D3D11_LOG: {Environment.GetEnvironmentVariable("CTRLHANABI_D3D11_LOG") ?? "(unset)"}",
+                $"CTRLHANABI_GPU_PHYSICS: {Environment.GetEnvironmentVariable("CTRLHANABI_GPU_PHYSICS") ?? "(unset)"}",
+                $"CTRLHANABI_GPU_PHYSICS_LOG: {Environment.GetEnvironmentVariable("CTRLHANABI_GPU_PHYSICS_LOG") ?? "(unset)"}",
+                string.Empty
+            };
+
+            File.AppendAllLines(logPath, lines);
+        }
+        catch
+        {
+        }
+    }
+
+    private static void EnsureDefaultRuntimeFlags()
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CTRLHANABI_D3D11")))
+        {
+            Environment.SetEnvironmentVariable("CTRLHANABI_D3D11", "1");
+        }
+
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CTRLHANABI_GPU_PHYSICS")))
+        {
+            Environment.SetEnvironmentVariable("CTRLHANABI_GPU_PHYSICS", "1");
+        }
+    }
+
+    private static string GetBuildConfiguration()
+    {
+#if DEBUG
+        return "Debug";
+#else
+        return "Release";
+#endif
     }
 }
