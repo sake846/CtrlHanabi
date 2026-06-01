@@ -118,3 +118,19 @@ dotnet run
 注意:
 
 - 設定 UI はないので、修正する場合は `settings.json` を直接編集してください。
+
+## ログ設定（環境変数）
+
+Direct3D 関連のログは `%LocalAppData%\CtrlHanabi\d3d11.log` に出力されます。  
+出力可否は以下の環境変数で制御できます。
+
+- `CTRLHANABI_LOG`
+  全体ログスイッチ。`1` で有効、`0` で無効
+- `CTRLHANABI_D3D11_LOG`
+  互換用スイッチ。`CTRLHANABI_LOG` が未設定の場合のみ参照され、`1` で有効
+
+優先順位:
+
+1. `CTRLHANABI_LOG=0` の場合は常にログ無効
+2. `CTRLHANABI_LOG=1` の場合はログ有効
+3. `CTRLHANABI_LOG` 未設定時は `CTRLHANABI_D3D11_LOG` を参照
