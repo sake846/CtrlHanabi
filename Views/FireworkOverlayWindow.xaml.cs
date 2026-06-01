@@ -93,7 +93,7 @@ public partial class FireworkOverlayWindow : Window
         RootHost.Children.Add(_scene);
 
         SourceInitialized += OnSourceInitialized;
-        ApplyVirtualScreenBounds();
+        ApplyConfiguredDisplayBounds();
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
@@ -104,6 +104,7 @@ public partial class FireworkOverlayWindow : Window
     public void ShowFirework(WpfPoint screenPoint, bool forceStarmine = false)
     {
         _viewModel.ReloadSettings();
+        ApplyConfiguredDisplayBounds();
         PrepareEffectStorage();
         ClearEffectStorage();
         QueueLaunchPattern(screenPoint, forceStarmine);
@@ -251,7 +252,7 @@ public partial class FireworkOverlayWindow : Window
         }
 
         var launch = _launchQueue.Dequeue();
-        var launchY = GetLaunchY(new WpfPoint(launch.TargetX + Left, launch.TargetY + Top));
+        var launchY = GetLaunchY();
         var startX = launch.IsStarmine ? launch.TargetX : launch.TargetX + ((_random.NextDouble() - 0.5) * 36);
         var altitudeFactor = 1 - Math.Clamp(launch.TargetY / Math.Max(Height, 1), 0, 1);
         var jitterScale = 1.2 + (altitudeFactor * 2.0);
@@ -554,21 +555,44 @@ public partial class FireworkOverlayWindow : Window
         Hide();
     }
 
-    private void ApplyVirtualScreenBounds()
+    private void ApplyConfiguredDisplayBounds()
     {
-        Left = SystemParameters.VirtualScreenLeft;
-        Top = SystemParameters.VirtualScreenTop;
-        Width = SystemParameters.VirtualScreenWidth;
-        Height = SystemParameters.VirtualScreenHeight;
+        var screen = ResolveConfiguredScreen();
+        Left = screen.Bounds.Left;
+        Top = screen.Bounds.Top;
+        Width = screen.Bounds.Width;
+        Height = screen.Bounds.Height;
     }
 
-    private double GetLaunchY(WpfPoint screenPoint)
+    private FormsScreen ResolveConfiguredScreen()
     {
-        var screen = FormsScreen.FromPoint(new((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y)));
+        var screens = FormsScreen.AllScreens;
+        if (screens.Length == 0)
+        {
+            return FormsScreen.PrimaryScreen ?? throw new InvalidOperationException("No display is available.");
+        }
+
+        var configuredDisplayIndex = _viewModel.Settings.StarmineDisplayIndex;
+        var zeroBasedIndex = configuredDisplayIndex - 1;
+        if (zeroBasedIndex < 0 || zeroBasedIndex >= screens.Length)
+        {
+            zeroBasedIndex = 0;
+        }
+
+        return screens[zeroBasedIndex];
+    }
+
+    private double GetLaunchY()
+    {
+        var screen = ResolveConfiguredScreen();
         return screen.WorkingArea.Bottom - Top - 8;
     }
 
-    private void OnDisplaySettingsChanged(object? sender, EventArgs e) => ApplyVirtualScreenBounds();
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+    {
+        _viewModel.ReloadSettings();
+        ApplyConfiguredDisplayBounds();
+    }
 
     private static void LogOverlayFailure(string message)
     {
