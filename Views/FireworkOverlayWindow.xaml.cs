@@ -5,6 +5,7 @@ using System.Windows.Interop;
 using System.Windows.Threading;
 using FormsScreen = System.Windows.Forms.Screen;
 using CtrlHanabi.Models;
+using CtrlHanabi.ViewModels;
 using Microsoft.Win32;
 using WpfColor = System.Windows.Media.Color;
 using WpfPoint = System.Windows.Point;
@@ -33,20 +34,14 @@ public partial class FireworkOverlayWindow : Window
     private const int MaxParticleTrailSegments = 4;
     private const int MaxRocketTrailSegments = 8;
     private static readonly double[] KobanaBurstProgressThresholds = [0.50, 0.68, 0.82];
-    private const double StarmineChance = 0.55;
-    private const int StarmineMinShots = 4;
     private const int StarmineMaxShots = 7;
-    private const int StarmineFixedShots = 20;
-    private const double StarmineBaseIntervalSeconds = 0.2;
     private const double StarmineIntervalJitterSeconds = 0.2;
-    private const double StarmineLastPairGapSeconds = 0.05;
     private const double LeafAscentEmitProgressStep = 0.064;
     private const int GroundLeafStarBurstCount = 8;
     private const double StarmineLaunchAngleJitter = 50;
     private const double SingleLaunchAngleJitter = 10;
     private const int MaxConcurrentRockets = 15;
     private const bool DisableGpuPhysicsDuringStarmine = false;
-    private static readonly double[] StarmineLaunchXFractions = [0.25, 0.5, 0.75];
 
     private const int GwlExStyle = -20;
     private const int WsExTransparent = 0x00000020;
@@ -65,7 +60,7 @@ public partial class FireworkOverlayWindow : Window
     private readonly List<RenderRocket> _renderRockets = [];
     private readonly GpuParticlePhysics _gpuParticlePhysics = new();
     private readonly Random _random = new();
-    private readonly Services.SettingsService _settingsService = new();
+    private readonly FireworkOverlayViewModel _viewModel;
     private readonly ParticleSceneElement _scene = new();
     private readonly BurstPalette[] _burstPalettes =
     [
@@ -84,7 +79,6 @@ public partial class FireworkOverlayWindow : Window
         new("kamuro-iron-deep", WpfColor.FromRgb(255, 172, 96), WpfColor.FromRgb(255, 222, 160))
     ];
 
-    private HanabiSettings _settings;
     private DateTime _started;
     private readonly List<Rocket> _activeRockets = [];
     private readonly Queue<LaunchRequest> _launchQueue = new();
@@ -93,7 +87,7 @@ public partial class FireworkOverlayWindow : Window
 
     public FireworkOverlayWindow(HanabiSettings settings)
     {
-        _settings = settings;
+        _viewModel = new FireworkOverlayViewModel(settings);
         InitializeComponent();
         RootHost.Children.Add(_scene);
 
@@ -108,7 +102,7 @@ public partial class FireworkOverlayWindow : Window
 
     public void ShowFirework(WpfPoint screenPoint, bool forceStarmine = false)
     {
-        _settings = _settingsService.Load();
+        _viewModel.ReloadSettings();
         PrepareEffectStorage();
         ClearEffectStorage();
         QueueLaunchPattern(screenPoint, forceStarmine);
@@ -240,65 +234,11 @@ public partial class FireworkOverlayWindow : Window
     private void QueueLaunchPattern(WpfPoint screenPoint, bool forceStarmine)
     {
         _launchQueue.Clear();
-        var localX = screenPoint.X - Left;
-        var localY = screenPoint.Y - Top;
-
-        if (!forceStarmine)
+        var launchPlan = _viewModel.BuildLaunchPlan(screenPoint, forceStarmine, Left, Top, Width, Height);
+        _isStarmineActive = launchPlan.IsStarmineActive;
+        foreach (var request in launchPlan.Requests)
         {
-            _isStarmineActive = false;
-            _launchQueue.Enqueue(new LaunchRequest(localX, localY, 0, false));
-            return;
-        }
-
-        var enabledLanes = GetEnabledStarmineLanes();
-        if (enabledLanes.Count == 0)
-        {
-            _isStarmineActive = false;
-            return;
-        }
-
-        _isStarmineActive = true;
-        for (var i = 0; i < StarmineFixedShots; i++)
-        {
-            var waveDelay = i switch
-            {
-                0 => 0,
-                19 => StarmineLastPairGapSeconds,
-                < 20 => 0.5,
-                _ => StarmineBaseIntervalSeconds
-            };
-            var targetY = i < 8
-                ? Height * 0.50
-                : i < 15
-                    ? Height * 0.40
-                    : Height * 0.20;
-            var burstScale = i < 8
-                ? 1.0
-                : i < 15
-                ? 1.5
-                    : 2.0;
-
-            var laneOrder = new int[enabledLanes.Count];
-            for (var lane = 0; lane < laneOrder.Length; lane++)
-            {
-                laneOrder[lane] = lane;
-            }
-
-            for (var lane = laneOrder.Length - 1; lane > 0; lane--)
-            {
-                var swapIndex = _random.Next(lane + 1);
-                (laneOrder[lane], laneOrder[swapIndex]) = (laneOrder[swapIndex], laneOrder[lane]);
-            }
-
-            for (var orderIndex = 0; orderIndex < laneOrder.Length; orderIndex++)
-            {
-                var lane = enabledLanes[laneOrder[orderIndex]];
-                var targetX = Width * lane.XFraction;
-                var delay = orderIndex == 0
-                    ? waveDelay
-                    : _random.NextDouble() * StarmineIntervalJitterSeconds;
-                _launchQueue.Enqueue(new LaunchRequest(targetX, targetY, delay, true, burstScale));
-            }
+            _launchQueue.Enqueue(request);
         }
     }
 
@@ -376,8 +316,8 @@ public partial class FireworkOverlayWindow : Window
     {
         var x = rocket.ApexX;
         var y = rocket.ApexY;
-        var petalCount = Math.Max(_settings.ParticleCount * 2, MinimumBurstPetalCount);
-        var outerRadius = _settings.ExplosionRadius * 1.18 * rocket.BurstScale;
+        var petalCount = Math.Max(_viewModel.Settings.ParticleCount * 2, MinimumBurstPetalCount);
+        var outerRadius = _viewModel.Settings.ExplosionRadius * 1.18 * rocket.BurstScale;
         var isChrysanthemum = rocket.BurstKind == BurstKind.Chrysanthemum;
         var isBotan = rocket.BurstKind == BurstKind.Botan;
         var isKamuro = rocket.BurstKind == BurstKind.KamuroGiku;
@@ -1006,10 +946,10 @@ public partial class FireworkOverlayWindow : Window
 
     private void PrepareEffectStorage()
     {
-        var starmineLaneCount = Math.Max(1, GetEnabledStarmineLanes().Count);
-        var starmineQueuedShots = StarmineFixedShots * starmineLaneCount;
+        var starmineLaneCount = Math.Max(1, _viewModel.GetEnabledStarmineLaneCount());
+        var starmineQueuedShots = 20 * starmineLaneCount;
         var capacityShots = Math.Max(StarmineMaxShots, starmineQueuedShots);
-        var burstParticles = Math.Max(_settings.ParticleCount * 2, MinimumBurstPetalCount) * capacityShots;
+        var burstParticles = Math.Max(_viewModel.Settings.ParticleCount * 2, MinimumBurstPetalCount) * capacityShots;
         var burstTrailCount = burstParticles * EstimatedBurstTrailFrames;
         var totalParticleCapacity = burstParticles + (KobanaCapacityParticleCount * capacityShots);
         var totalTrailCapacity = (LaunchBlastParticleCount * capacityShots) + (EstimatedRocketTrailCapacity * capacityShots) + burstTrailCount;
@@ -1021,26 +961,6 @@ public partial class FireworkOverlayWindow : Window
         _renderRockets.EnsureCapacity(MaxConcurrentRockets);
     }
 
-    private List<StarmineLane> GetEnabledStarmineLanes()
-    {
-        var lanes = new List<StarmineLane>(3);
-        if (_settings.StarmineLaneLeftEnabled)
-        {
-            lanes.Add(new StarmineLane(0, StarmineLaunchXFractions[0]));
-        }
-
-        if (_settings.StarmineLaneCenterEnabled)
-        {
-            lanes.Add(new StarmineLane(1, StarmineLaunchXFractions[1]));
-        }
-
-        if (_settings.StarmineLaneRightEnabled)
-        {
-            lanes.Add(new StarmineLane(2, StarmineLaunchXFractions[2]));
-        }
-
-        return lanes;
-    }
 
     private void ClearEffectStorage()
     {
@@ -1079,9 +999,6 @@ public partial class FireworkOverlayWindow : Window
         Charcoal,
         Silver
     }
-
-    private readonly record struct LaunchRequest(double TargetX, double TargetY, double DelaySeconds, bool IsStarmine, double BurstScale = 1.0);
-    private readonly record struct StarmineLane(int Index, double XFraction);
 
     private sealed class Rocket
     {
