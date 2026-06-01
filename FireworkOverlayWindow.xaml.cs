@@ -250,6 +250,13 @@ public partial class FireworkOverlayWindow : Window
             return;
         }
 
+        var enabledLanes = GetEnabledStarmineLanes();
+        if (enabledLanes.Count == 0)
+        {
+            _isStarmineActive = false;
+            return;
+        }
+
         _isStarmineActive = true;
         for (var i = 0; i < StarmineFixedShots; i++)
         {
@@ -268,10 +275,10 @@ public partial class FireworkOverlayWindow : Window
             var burstScale = i < 8
                 ? 1.0
                 : i < 15
-                    ? 1.5
+                ? 1.5
                     : 2.0;
 
-            var laneOrder = new int[StarmineLaunchXFractions.Length];
+            var laneOrder = new int[enabledLanes.Count];
             for (var lane = 0; lane < laneOrder.Length; lane++)
             {
                 laneOrder[lane] = lane;
@@ -285,8 +292,8 @@ public partial class FireworkOverlayWindow : Window
 
             for (var orderIndex = 0; orderIndex < laneOrder.Length; orderIndex++)
             {
-                var lane = laneOrder[orderIndex];
-                var targetX = Width * StarmineLaunchXFractions[lane];
+                var lane = enabledLanes[laneOrder[orderIndex]];
+                var targetX = Width * lane.XFraction;
                 var delay = orderIndex == 0
                     ? waveDelay
                     : _random.NextDouble() * StarmineIntervalJitterSeconds;
@@ -624,23 +631,7 @@ public partial class FireworkOverlayWindow : Window
 
     private static void LogOverlayFailure(string message)
     {
-        if (!string.Equals(Environment.GetEnvironmentVariable("CTRLHANABI_D3D11_LOG"), "1", StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        try
-        {
-            var logPath = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "CtrlHanabi",
-                "d3d11.log");
-            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(logPath)!);
-            System.IO.File.AppendAllText(logPath, $"{DateTime.Now:O} {message}{Environment.NewLine}");
-        }
-        catch
-        {
-        }
+        RuntimeLogging.AppendD3D11Log(message);
     }
 
     protected override void OnClosed(EventArgs e)
@@ -1015,7 +1006,8 @@ public partial class FireworkOverlayWindow : Window
 
     private void PrepareEffectStorage()
     {
-        var starmineQueuedShots = StarmineFixedShots * StarmineLaunchXFractions.Length;
+        var starmineLaneCount = Math.Max(1, GetEnabledStarmineLanes().Count);
+        var starmineQueuedShots = StarmineFixedShots * starmineLaneCount;
         var capacityShots = Math.Max(StarmineMaxShots, starmineQueuedShots);
         var burstParticles = Math.Max(_settings.ParticleCount * 2, MinimumBurstPetalCount) * capacityShots;
         var burstTrailCount = burstParticles * EstimatedBurstTrailFrames;
@@ -1027,6 +1019,27 @@ public partial class FireworkOverlayWindow : Window
         _renderParticles.EnsureCapacity(totalParticleCapacity);
         _renderTrails.EnsureCapacity(totalTrailCapacity);
         _renderRockets.EnsureCapacity(MaxConcurrentRockets);
+    }
+
+    private List<StarmineLane> GetEnabledStarmineLanes()
+    {
+        var lanes = new List<StarmineLane>(3);
+        if (_settings.StarmineLaneLeftEnabled)
+        {
+            lanes.Add(new StarmineLane(0, StarmineLaunchXFractions[0]));
+        }
+
+        if (_settings.StarmineLaneCenterEnabled)
+        {
+            lanes.Add(new StarmineLane(1, StarmineLaunchXFractions[1]));
+        }
+
+        if (_settings.StarmineLaneRightEnabled)
+        {
+            lanes.Add(new StarmineLane(2, StarmineLaunchXFractions[2]));
+        }
+
+        return lanes;
     }
 
     private void ClearEffectStorage()
@@ -1068,6 +1081,7 @@ public partial class FireworkOverlayWindow : Window
     }
 
     private readonly record struct LaunchRequest(double TargetX, double TargetY, double DelaySeconds, bool IsStarmine, double BurstScale = 1.0);
+    private readonly record struct StarmineLane(int Index, double XFraction);
 
     private sealed class Rocket
     {

@@ -57,12 +57,14 @@ public partial class App : WpfApplication
 
     private static void WriteStartupDiagnostics()
     {
+        if (!RuntimeLogging.IsD3D11LogEnabled())
+        {
+            return;
+        }
+
         try
         {
-            var logPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "CtrlHanabi",
-                "d3d11.log");
+            var logPath = RuntimeLogging.GetD3D11LogPath();
             Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
 
             var process = Process.GetCurrentProcess();
@@ -78,6 +80,7 @@ public partial class App : WpfApplication
                 $"Runtime: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}",
                 $"OS: {System.Runtime.InteropServices.RuntimeInformation.OSDescription}",
                 $"BuildConfig: {GetBuildConfiguration()}",
+                $"CTRLHANABI_LOG: {Environment.GetEnvironmentVariable("CTRLHANABI_LOG") ?? "(unset)"}",
                 $"CTRLHANABI_D3D11: {Environment.GetEnvironmentVariable("CTRLHANABI_D3D11") ?? "(unset)"}",
                 $"CTRLHANABI_D3D11_LOG: {Environment.GetEnvironmentVariable("CTRLHANABI_D3D11_LOG") ?? "(unset)"}",
                 $"CTRLHANABI_GPU_PHYSICS: {Environment.GetEnvironmentVariable("CTRLHANABI_GPU_PHYSICS") ?? "(unset)"}",

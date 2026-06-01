@@ -12,6 +12,9 @@ public sealed class HanabiSettings
     public int ParticleCount { get; init; } = DefaultParticleCount;
     public double ExplosionRadius { get; init; } = DefaultExplosionRadius;
     public bool HourlyStarmineEnabled { get; init; }
+    public bool StarmineLaneLeftEnabled { get; init; } = true;
+    public bool StarmineLaneCenterEnabled { get; init; } = true;
+    public bool StarmineLaneRightEnabled { get; init; } = true;
 
     public static HanabiSettings Default => new();
 }

@@ -3,7 +3,6 @@ using System.Text;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
-using System.IO;
 using WpfColor = System.Windows.Media.Color;
 
 namespace CtrlHanabi;
@@ -17,8 +16,6 @@ internal sealed class D3DParticleRenderer : IDisposable
     private const int RingVertexCount = CircleSegments * 6;
     private static readonly bool Direct3D11Enabled =
         !string.Equals(Environment.GetEnvironmentVariable("CTRLHANABI_D3D11"), "0", StringComparison.Ordinal);
-    private static readonly bool Direct3D11LoggingEnabled =
-        string.Equals(Environment.GetEnvironmentVariable("CTRLHANABI_D3D11_LOG"), "1", StringComparison.Ordinal);
 
     private static readonly byte[] PositionSemantic = "POSITION\0"u8.ToArray();
     private static readonly byte[] TexCoordSemantic = "TEXCOORD\0"u8.ToArray();
@@ -54,11 +51,6 @@ internal sealed class D3DParticleRenderer : IDisposable
             return input.color;
         }
         """);
-    private static readonly string LogPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "CtrlHanabi",
-        "d3d11.log");
-
     private readonly D3DImage _image = new();
     private D3D11Device? _device11;
     private D3D11DeviceContext? _context11;
@@ -476,19 +468,7 @@ internal sealed class D3DParticleRenderer : IDisposable
 
     private static void Log(string message)
     {
-        if (!Direct3D11LoggingEnabled)
-        {
-            return;
-        }
-
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
-            File.AppendAllText(LogPath, $"{DateTime.Now:O} {message}{Environment.NewLine}");
-        }
-        catch
-        {
-        }
+        RuntimeLogging.AppendD3D11Log(message);
     }
 
     [StructLayout(LayoutKind.Sequential)]

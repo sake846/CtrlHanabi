@@ -89,7 +89,10 @@ dotnet run
   "CooldownMs": 500,
   "ParticleCount": 90,
   "ExplosionRadius": 110,
-  "HourlyStarmineEnabled": false
+  "HourlyStarmineEnabled": false,
+  "StarmineLaneLeftEnabled": true,
+  "StarmineLaneCenterEnabled": true,
+  "StarmineLaneRightEnabled": true
 }
 ```
 
@@ -105,6 +108,12 @@ dotnet run
   爆発半径の基準値
 - `HourlyStarmineEnabled`
   毎時 `59分30秒` にスターマインを打ち上げるかどうか
+- `StarmineLaneLeftEnabled`
+  スターマインの左レーンを有効にするかどうか
+- `StarmineLaneCenterEnabled`
+  スターマインの中央レーンを有効にするかどうか
+- `StarmineLaneRightEnabled`
+  スターマインの右レーンを有効にするかどうか
 
 注意:
 

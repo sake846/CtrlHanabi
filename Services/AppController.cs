@@ -192,7 +192,10 @@ public sealed class AppController : IDisposable
         CooldownMs = settings.CooldownMs,
         ParticleCount = settings.ParticleCount,
         ExplosionRadius = settings.ExplosionRadius,
-        HourlyStarmineEnabled = hourlyStarmineEnabled
+        HourlyStarmineEnabled = hourlyStarmineEnabled,
+        StarmineLaneLeftEnabled = settings.StarmineLaneLeftEnabled,
+        StarmineLaneCenterEnabled = settings.StarmineLaneCenterEnabled,
+        StarmineLaneRightEnabled = settings.StarmineLaneRightEnabled
     };
 
     private void CheckHourlyStarmine(object? state)
