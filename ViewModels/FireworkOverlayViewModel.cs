@@ -47,13 +47,19 @@ internal sealed class FireworkOverlayViewModel
             return new LaunchPlan(false, [new LaunchRequest(localX, localY, 0, false)]);
         }
 
-        var enabledLanes = GetEnabledStarmineLanes();
-        if (enabledLanes.Count == 0)
+        Span<double> enabledLaneFractions = stackalloc double[3];
+        var enabledLaneCount = 0;
+        if (Settings.StarmineLaneLeftEnabled) enabledLaneFractions[enabledLaneCount++] = StarmineLaunchXFractions[0];
+        if (Settings.StarmineLaneCenterEnabled) enabledLaneFractions[enabledLaneCount++] = StarmineLaunchXFractions[1];
+        if (Settings.StarmineLaneRightEnabled) enabledLaneFractions[enabledLaneCount++] = StarmineLaunchXFractions[2];
+
+        if (enabledLaneCount == 0)
         {
             return new LaunchPlan(false, []);
         }
 
-        var requests = new List<LaunchRequest>(StarmineFixedShots * enabledLanes.Count);
+        var requests = new List<LaunchRequest>(StarmineFixedShots * enabledLaneCount);
+        Span<int> laneOrder = stackalloc int[3];
         for (var i = 0; i < StarmineFixedShots; i++)
         {
             var waveDelay = i switch
@@ -74,22 +80,20 @@ internal sealed class FireworkOverlayViewModel
                     ? 1.5
                     : 2.0;
 
-            var laneOrder = new int[enabledLanes.Count];
-            for (var lane = 0; lane < laneOrder.Length; lane++)
+            for (var lane = 0; lane < enabledLaneCount; lane++)
             {
                 laneOrder[lane] = lane;
             }
 
-            for (var lane = laneOrder.Length - 1; lane > 0; lane--)
+            for (var lane = enabledLaneCount - 1; lane > 0; lane--)
             {
                 var swapIndex = _random.Next(lane + 1);
                 (laneOrder[lane], laneOrder[swapIndex]) = (laneOrder[swapIndex], laneOrder[lane]);
             }
 
-            for (var orderIndex = 0; orderIndex < laneOrder.Length; orderIndex++)
+            for (var orderIndex = 0; orderIndex < enabledLaneCount; orderIndex++)
             {
-                var lane = enabledLanes[laneOrder[orderIndex]];
-                var targetX = width * lane.XFraction;
+                var targetX = width * enabledLaneFractions[laneOrder[orderIndex]];
                 var delay = orderIndex == 0 ? waveDelay : _random.NextDouble() * StarmineIntervalJitterSeconds;
                 requests.Add(new LaunchRequest(targetX, targetY, delay, true, burstScale));
             }
@@ -97,17 +101,6 @@ internal sealed class FireworkOverlayViewModel
 
         return new LaunchPlan(true, requests);
     }
-
-    private List<StarmineLane> GetEnabledStarmineLanes()
-    {
-        var lanes = new List<StarmineLane>(3);
-        if (Settings.StarmineLaneLeftEnabled) lanes.Add(new StarmineLane(StarmineLaunchXFractions[0]));
-        if (Settings.StarmineLaneCenterEnabled) lanes.Add(new StarmineLane(StarmineLaunchXFractions[1]));
-        if (Settings.StarmineLaneRightEnabled) lanes.Add(new StarmineLane(StarmineLaunchXFractions[2]));
-        return lanes;
-    }
-
-    private readonly record struct StarmineLane(double XFraction);
 }
 
 internal readonly record struct LaunchRequest(double TargetX, double TargetY, double DelaySeconds, bool IsStarmine, double BurstScale = 1.0);

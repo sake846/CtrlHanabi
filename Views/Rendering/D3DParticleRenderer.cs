@@ -16,6 +16,7 @@ internal sealed class D3DParticleRenderer : IDisposable
     private const int RingVertexCount = CircleSegments * 6;
     private static readonly bool Direct3D11Enabled =
         !string.Equals(Environment.GetEnvironmentVariable("CTRLHANABI_D3D11"), "0", StringComparison.Ordinal);
+    private static readonly bool D3DLogEnabled = RuntimeLogging.IsD3D11LogEnabled();
 
     private static readonly byte[] PositionSemantic = "POSITION\0"u8.ToArray();
     private static readonly byte[] TexCoordSemantic = "TEXCOORD\0"u8.ToArray();
@@ -468,6 +469,11 @@ internal sealed class D3DParticleRenderer : IDisposable
 
     private static void Log(string message)
     {
+        if (!D3DLogEnabled)
+        {
+            return;
+        }
+
         RuntimeLogging.AppendD3D11Log(message);
     }
 
@@ -1086,7 +1092,10 @@ internal sealed class D3DParticleRenderer : IDisposable
                 &handle);
             if (result < 0)
             {
-                Log($"D3D9 shared texture open failed: 0x{result:X8}, size={width}x{height}, handle=0x{sharedHandle:X}");
+                if (D3DLogEnabled)
+                {
+                    Log($"D3D9 shared texture open failed: 0x{result:X8}, size={width}x{height}, handle=0x{sharedHandle:X}");
+                }
             }
 
             D3D9.ThrowIfFailed(result);

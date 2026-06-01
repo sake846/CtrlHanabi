@@ -101,13 +101,6 @@ internal sealed class ParticleSceneElement : FrameworkElement
         {
             drawingContext.DrawImage(_particleRenderer.Image, new Rect(0, 0, ActualWidth, ActualHeight));
         }
-        else
-        {
-            foreach (var trail in _trails)
-            {
-                DrawFilledCircle(drawingContext, trail.X, trail.Y, trail.Size / 2, CreateBrush(trail.Color, trail.Opacity));
-            }
-        }
 
         foreach (var rocket in _rockets)
         {
@@ -136,14 +129,6 @@ internal sealed class ParticleSceneElement : FrameworkElement
             }
         }
 
-        if (!_renderedWithGpu)
-        {
-            foreach (var particle in _particles)
-            {
-                DrawFilledCircle(drawingContext, particle.X, particle.Y, particle.GlowSize / 2, CreateBrush(particle.GlowColor, particle.GlowOpacity));
-                DrawFilledCircle(drawingContext, particle.X, particle.Y, particle.CoreSize / 2, CreateBrush(particle.CoreColor, particle.CoreOpacity));
-            }
-        }
     }
 
     private static WpfBrush CreateFrozenBrush(WpfColor color)
@@ -177,17 +162,6 @@ internal sealed class ParticleSceneElement : FrameworkElement
         }
 
         return pen;
-    }
-
-    private static WpfBrush CreateBrush(WpfColor color, double opacity)
-    {
-        var brush = new SolidColorBrush(color) { Opacity = Math.Clamp(opacity, 0, 1) };
-        if (brush.CanFreeze)
-        {
-            brush.Freeze();
-        }
-
-        return brush;
     }
 
     private static void DrawFilledCircle(DrawingContext drawingContext, double x, double y, double radius, WpfBrush brush)
