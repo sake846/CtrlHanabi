@@ -1,5 +1,4 @@
 using System.Drawing;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Forms;
 using CtrlHanabi.Models;
@@ -18,7 +17,9 @@ public sealed class AppController : IDisposable
     private const string ExitMenuText = "終了";
     private const string SettingsResetMessage = "設定を初期値に戻しました。";
 
-    private readonly SettingsService _settingsService = new();
+    private readonly ISettingsService _settingsService;
+    private readonly ICursorService _cursorService;
+    private readonly IExitConfirmationService _exitConfirmationService;
     private readonly KeyboardDoubleTapDetector _detector;
     private readonly FireworkOverlayWindow _overlay;
     private readonly Icon _trayIcon;
@@ -31,11 +32,20 @@ public sealed class AppController : IDisposable
     private CancellationTokenSource? _doubleTapCts;
 
     public AppController()
+        : this(new SettingsService(), new WindowsCursorService(), new WindowsExitConfirmationService())
     {
+    }
+
+    internal AppController(ISettingsService settingsService, ICursorService cursorService, IExitConfirmationService exitConfirmationService)
+    {
+        _settingsService = settingsService;
+        _cursorService = cursorService;
+        _exitConfirmationService = exitConfirmationService;
+
         var settings = _settingsService.Load();
         _tapThresholdMs = settings.DoubleTapThresholdMs;
         _detector = new KeyboardDoubleTapDetector(settings.DoubleTapThresholdMs);
-        _overlay = new FireworkOverlayWindow(settings);
+        _overlay = new FireworkOverlayWindow(settings, _settingsService);
 
         _detector.DoubleTapDetected += OnDoubleTapDetected;
         _detector.TripleTapDetected += OnTripleTapDetected;
@@ -72,7 +82,7 @@ public sealed class AppController : IDisposable
 
         _lastTrigger = DateTime.UtcNow;
 
-        var mouse = NativeMethods.GetCursorScreenPoint();
+        var mouse = _cursorService.GetCursorScreenPoint();
 
         WpfApplication.Current.Dispatcher.Invoke(() =>
         {
@@ -103,7 +113,7 @@ public sealed class AppController : IDisposable
         }
 
         _lastTrigger = DateTime.UtcNow;
-        var mouse = NativeMethods.GetCursorScreenPoint();
+        var mouse = _cursorService.GetCursorScreenPoint();
 
         WpfApplication.Current.Dispatcher.Invoke(() =>
         {
@@ -226,7 +236,7 @@ public sealed class AppController : IDisposable
 
     private void RequestExit()
     {
-        var result = NativeMethods.ShowTopmostExitConfirmation();
+        var result = _exitConfirmationService.ConfirmExit(AppName);
 
         if (result != DialogResult.Yes)
         {
@@ -235,56 +245,6 @@ public sealed class AppController : IDisposable
 
         _notifyIcon.Visible = false;
         WpfApplication.Current.Shutdown();
-    }
-
-    private static class NativeMethods
-    {
-        private const uint MbIconQuestion = 0x00000020;
-        private const uint MbYesNo = 0x00000004;
-        private const uint MbSetForeground = 0x00010000;
-        private const uint MbTopmost = 0x00040000;
-        private const int IdYes = 6;
-        private const string ExitConfirmMessage = "CtrlHanabiを終了しますか？";
-
-        public static DialogResult ShowTopmostExitConfirmation()
-        {
-            var result = MessageBox(
-                nint.Zero,
-                ExitConfirmMessage,
-                AppName,
-                MbYesNo | MbIconQuestion | MbSetForeground | MbTopmost);
-
-            return result == IdYes ? DialogResult.Yes : DialogResult.No;
-        }
-
-        public static System.Windows.Point GetCursorScreenPoint()
-        {
-            if (GetPhysicalCursorPos(out var point) || GetCursorPos(out point))
-            {
-                return new System.Windows.Point(point.X, point.Y);
-            }
-
-            var fallback = System.Windows.Forms.Cursor.Position;
-            return new System.Windows.Point(fallback.X, fallback.Y);
-        }
-
-        [DllImport("user32.dll", EntryPoint = "MessageBoxW", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern int MessageBox(nint hWnd, string lpText, string lpCaption, uint uType);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetPhysicalCursorPos(out CursorPoint point);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetCursorPos(out CursorPoint point);
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct CursorPoint
-        {
-            public int X;
-            public int Y;
-        }
     }
 
     public void Dispose()

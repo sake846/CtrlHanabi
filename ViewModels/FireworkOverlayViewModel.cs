@@ -13,13 +13,14 @@ internal sealed class FireworkOverlayViewModel
     private static readonly double[] StarmineLaunchXFractions = [0.25, 0.5, 0.75];
 
     private readonly Random _random = new();
-    private readonly SettingsService _settingsService = new();
+    private readonly ISettingsService _settingsService;
 
     public HanabiSettings Settings { get; private set; }
 
-    public FireworkOverlayViewModel(HanabiSettings settings)
+    public FireworkOverlayViewModel(HanabiSettings settings, ISettingsService settingsService)
     {
         Settings = settings;
+        _settingsService = settingsService;
     }
 
     public void ReloadSettings()

@@ -4,7 +4,7 @@ using CtrlHanabi.Models;
 
 namespace CtrlHanabi.Services;
 
-public sealed class SettingsService
+public sealed class SettingsService : ISettingsService
 {
     private static readonly JsonSerializerOptions IndentedSerializerOptions = new() { WriteIndented = true };
 

@@ -5,6 +5,7 @@ using System.Windows.Interop;
 using System.Windows.Threading;
 using FormsScreen = System.Windows.Forms.Screen;
 using CtrlHanabi.Models;
+using CtrlHanabi.Services;
 using CtrlHanabi.ViewModels;
 using Microsoft.Win32;
 using WpfColor = System.Windows.Media.Color;
@@ -85,9 +86,9 @@ public partial class FireworkOverlayWindow : Window
     private double _launchDelay;
     private bool _isStarmineActive;
 
-    public FireworkOverlayWindow(HanabiSettings settings)
+    public FireworkOverlayWindow(HanabiSettings settings, ISettingsService settingsService)
     {
-        _viewModel = new FireworkOverlayViewModel(settings);
+        _viewModel = new FireworkOverlayViewModel(settings, settingsService);
         InitializeComponent();
         RootHost.Children.Add(_scene);
 
