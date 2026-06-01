@@ -85,6 +85,7 @@ public partial class FireworkOverlayWindow : Window
     private readonly Queue<LaunchRequest> _launchQueue = new();
     private double _launchDelay;
     private bool _isStarmineActive;
+    private bool _useConfiguredDisplayBounds;
 
     public FireworkOverlayWindow(HanabiSettings settings, ISettingsService settingsService)
     {
@@ -93,7 +94,8 @@ public partial class FireworkOverlayWindow : Window
         RootHost.Children.Add(_scene);
 
         SourceInitialized += OnSourceInitialized;
-        ApplyConfiguredDisplayBounds();
+        _useConfiguredDisplayBounds = false;
+        ApplyOverlayBounds();
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
@@ -104,7 +106,8 @@ public partial class FireworkOverlayWindow : Window
     public void ShowFirework(WpfPoint screenPoint, bool forceStarmine = false)
     {
         _viewModel.ReloadSettings();
-        ApplyConfiguredDisplayBounds();
+        _useConfiguredDisplayBounds = forceStarmine;
+        ApplyOverlayBounds();
         PrepareEffectStorage();
         ClearEffectStorage();
         QueueLaunchPattern(screenPoint, forceStarmine);
@@ -252,7 +255,7 @@ public partial class FireworkOverlayWindow : Window
         }
 
         var launch = _launchQueue.Dequeue();
-        var launchY = GetLaunchY();
+        var launchY = GetLaunchY(new WpfPoint(launch.TargetX + Left, launch.TargetY + Top));
         var startX = launch.IsStarmine ? launch.TargetX : launch.TargetX + ((_random.NextDouble() - 0.5) * 36);
         var altitudeFactor = 1 - Math.Clamp(launch.TargetY / Math.Max(Height, 1), 0, 1);
         var jitterScale = 1.2 + (altitudeFactor * 2.0);
@@ -555,6 +558,25 @@ public partial class FireworkOverlayWindow : Window
         Hide();
     }
 
+    private void ApplyOverlayBounds()
+    {
+        if (_useConfiguredDisplayBounds)
+        {
+            ApplyConfiguredDisplayBounds();
+            return;
+        }
+
+        ApplyVirtualScreenBounds();
+    }
+
+    private void ApplyVirtualScreenBounds()
+    {
+        Left = SystemParameters.VirtualScreenLeft;
+        Top = SystemParameters.VirtualScreenTop;
+        Width = SystemParameters.VirtualScreenWidth;
+        Height = SystemParameters.VirtualScreenHeight;
+    }
+
     private void ApplyConfiguredDisplayBounds()
     {
         var screen = ResolveConfiguredScreen();
@@ -582,16 +604,16 @@ public partial class FireworkOverlayWindow : Window
         return screens[zeroBasedIndex];
     }
 
-    private double GetLaunchY()
+    private double GetLaunchY(WpfPoint screenPoint)
     {
-        var screen = ResolveConfiguredScreen();
+        var screen = FormsScreen.FromPoint(new((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y)));
         return screen.WorkingArea.Bottom - Top - 8;
     }
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e)
     {
         _viewModel.ReloadSettings();
-        ApplyConfiguredDisplayBounds();
+        ApplyOverlayBounds();
     }
 
     private static void LogOverlayFailure(string message)
