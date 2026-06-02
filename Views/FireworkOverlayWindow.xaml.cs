@@ -15,6 +15,8 @@ namespace CtrlHanabi;
 
 public partial class FireworkOverlayWindow : Window
 {
+    private const double ReferenceWidth = 1920;
+    private const double ReferenceHeight = 1080;
     private const double FrameDeltaSeconds = 0.016;
     private const double PerspectiveDistance = 720;
     private const double MaxDepthOffset = 280;
@@ -259,7 +261,8 @@ public partial class FireworkOverlayWindow : Window
         }
 
         var launch = _launchQueue.Dequeue();
-        var effectScale = GetDipPerDevicePixel(OverlayToScreenPoint(new WpfPoint(launch.TargetX, launch.TargetY)));
+        var screenPoint = OverlayToScreenPoint(new WpfPoint(launch.TargetX, launch.TargetY));
+        var effectScale = GetDipPerDevicePixel(screenPoint) * GetStageScale(screenPoint);
         var launchY = GetLaunchY(new WpfPoint(launch.TargetX, launch.TargetY));
         var startX = launch.IsStarmine ? launch.TargetX : launch.TargetX + ((_random.NextDouble() - 0.5) * ScalePixels(36, effectScale));
         var altitudeFactor = 1 - Math.Clamp(launch.TargetY / Math.Max(Height, 1), 0, 1);
@@ -1204,6 +1207,18 @@ public partial class FireworkOverlayWindow : Window
     }
 
     private static double ScalePixels(double value, double effectScale) => value * effectScale;
+
+    private double GetStageScale(WpfPoint screenPoint)
+    {
+        var screen = FormsScreen.FromPoint(new((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y)));
+        var bounds = screen.Bounds;
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return 1.0;
+        }
+
+        return Math.Min(bounds.Width / ReferenceWidth, bounds.Height / ReferenceHeight);
+    }
 
     private double GetDipPerDevicePixel(WpfPoint screenPoint)
     {
