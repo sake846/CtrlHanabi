@@ -94,6 +94,7 @@ public partial class FireworkOverlayWindow : Window
         RootHost.Children.Add(_scene);
 
         SourceInitialized += OnSourceInitialized;
+        _ = new WindowInteropHelper(this).EnsureHandle();
         _useConfiguredDisplayBounds = false;
         ApplyOverlayBounds();
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
@@ -239,7 +240,8 @@ public partial class FireworkOverlayWindow : Window
     private void QueueLaunchPattern(WpfPoint screenPoint, bool forceStarmine)
     {
         _launchQueue.Clear();
-        var launchPlan = _viewModel.BuildLaunchPlan(screenPoint, forceStarmine, Left, Top, Width, Height);
+        var localPoint = ScreenToOverlayPoint(screenPoint);
+        var launchPlan = _viewModel.BuildLaunchPlan(localPoint, forceStarmine, Width, Height);
         _isStarmineActive = launchPlan.IsStarmineActive;
         foreach (var request in launchPlan.Requests)
         {
@@ -255,7 +257,7 @@ public partial class FireworkOverlayWindow : Window
         }
 
         var launch = _launchQueue.Dequeue();
-        var launchY = GetLaunchY(new WpfPoint(launch.TargetX + Left, launch.TargetY + Top));
+        var launchY = GetLaunchY(new WpfPoint(launch.TargetX, launch.TargetY));
         var startX = launch.IsStarmine ? launch.TargetX : launch.TargetX + ((_random.NextDouble() - 0.5) * 36);
         var altitudeFactor = 1 - Math.Clamp(launch.TargetY / Math.Max(Height, 1), 0, 1);
         var jitterScale = 1.2 + (altitudeFactor * 2.0);
@@ -571,19 +573,29 @@ public partial class FireworkOverlayWindow : Window
 
     private void ApplyVirtualScreenBounds()
     {
-        Left = SystemParameters.VirtualScreenLeft;
-        Top = SystemParameters.VirtualScreenTop;
-        Width = SystemParameters.VirtualScreenWidth;
-        Height = SystemParameters.VirtualScreenHeight;
+        var bounds = DeviceRectToDip(new Rect(
+            SystemParameters.VirtualScreenLeft,
+            SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenWidth,
+            SystemParameters.VirtualScreenHeight));
+        Left = bounds.Left;
+        Top = bounds.Top;
+        Width = bounds.Width;
+        Height = bounds.Height;
     }
 
     private void ApplyConfiguredDisplayBounds()
     {
         var screen = ResolveConfiguredScreen();
-        Left = screen.Bounds.Left;
-        Top = screen.Bounds.Top;
-        Width = screen.Bounds.Width;
-        Height = screen.Bounds.Height;
+        var bounds = DeviceRectToDip(new Rect(
+            screen.Bounds.Left,
+            screen.Bounds.Top,
+            screen.Bounds.Width,
+            screen.Bounds.Height));
+        Left = bounds.Left;
+        Top = bounds.Top;
+        Width = bounds.Width;
+        Height = bounds.Height;
     }
 
     private FormsScreen ResolveConfiguredScreen()
@@ -610,10 +622,12 @@ public partial class FireworkOverlayWindow : Window
         return orderedScreens[zeroBasedIndex];
     }
 
-    private double GetLaunchY(WpfPoint screenPoint)
+    private double GetLaunchY(WpfPoint overlayPoint)
     {
+        var screenPoint = OverlayToScreenPoint(overlayPoint);
         var screen = FormsScreen.FromPoint(new((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y)));
-        return screen.WorkingArea.Bottom - Top - 8;
+        var launchScreenPoint = new WpfPoint(screenPoint.X, screen.WorkingArea.Bottom - 8);
+        return ScreenToOverlayPoint(launchScreenPoint).Y;
     }
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e)
@@ -625,6 +639,52 @@ public partial class FireworkOverlayWindow : Window
     private static void LogOverlayFailure(string message)
     {
         RuntimeLogging.AppendD3D11Log(message);
+    }
+
+    private WpfPoint ScreenToOverlayPoint(WpfPoint screenPoint)
+    {
+        try
+        {
+            return PointFromScreen(screenPoint);
+        }
+        catch
+        {
+            var dipPoint = DeviceToDip(screenPoint);
+            return new WpfPoint(dipPoint.X - Left, dipPoint.Y - Top);
+        }
+    }
+
+    private WpfPoint OverlayToScreenPoint(WpfPoint overlayPoint)
+    {
+        try
+        {
+            return PointToScreen(overlayPoint);
+        }
+        catch
+        {
+            return DipToDevice(new WpfPoint(overlayPoint.X + Left, overlayPoint.Y + Top));
+        }
+    }
+
+    private Rect DeviceRectToDip(Rect deviceRect)
+    {
+        var topLeft = DeviceToDip(new WpfPoint(deviceRect.Left, deviceRect.Top));
+        var bottomRight = DeviceToDip(new WpfPoint(deviceRect.Right, deviceRect.Bottom));
+        return new Rect(topLeft, bottomRight);
+    }
+
+    private WpfPoint DeviceToDip(WpfPoint point)
+    {
+        var source = PresentationSource.FromVisual(this);
+        var transform = source?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+        return transform.Transform(point);
+    }
+
+    private WpfPoint DipToDevice(WpfPoint point)
+    {
+        var source = PresentationSource.FromVisual(this);
+        var transform = source?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
+        return transform.Transform(point);
     }
 
     protected override void OnClosed(EventArgs e)

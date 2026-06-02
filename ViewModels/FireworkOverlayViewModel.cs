@@ -37,14 +37,11 @@ internal sealed class FireworkOverlayViewModel
         return count;
     }
 
-    public LaunchPlan BuildLaunchPlan(WpfPoint screenPoint, bool forceStarmine, double left, double top, double width, double height)
+    public LaunchPlan BuildLaunchPlan(WpfPoint localPoint, bool forceStarmine, double width, double height)
     {
-        var localX = screenPoint.X - left;
-        var localY = screenPoint.Y - top;
-
         if (!forceStarmine)
         {
-            return new LaunchPlan(false, [new LaunchRequest(localX, localY, 0, false)]);
+            return new LaunchPlan(false, [new LaunchRequest(localPoint.X, localPoint.Y, 0, false)]);
         }
 
         Span<double> enabledLaneFractions = stackalloc double[3];
