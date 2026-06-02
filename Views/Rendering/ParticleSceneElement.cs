@@ -104,28 +104,37 @@ internal sealed class ParticleSceneElement : FrameworkElement
 
         foreach (var rocket in _rockets)
         {
+            var scale = rocket.Scale;
             drawingContext.DrawRoundedRectangle(
                 TubeBodyBrush,
                 TubeEdgePen,
-                new Rect(rocket.OriginX - TubeBodyOffsetX, rocket.OriginY - TubeBodyOffsetY, TubeBodyWidth, TubeBodyHeight),
-                TubeBodyCornerRadius,
-                TubeBodyCornerRadius);
+                new Rect(
+                    rocket.OriginX - (TubeBodyOffsetX * scale),
+                    rocket.OriginY - (TubeBodyOffsetY * scale),
+                    TubeBodyWidth * scale,
+                    TubeBodyHeight * scale),
+                TubeBodyCornerRadius * scale,
+                TubeBodyCornerRadius * scale);
             drawingContext.DrawRoundedRectangle(
                 TubeRimBrush,
                 null,
-                new Rect(rocket.OriginX - TubeRimOffsetX, rocket.OriginY - TubeRimOffsetY, TubeRimWidth, TubeRimHeight),
-                TubeRimCornerRadius,
-                TubeRimCornerRadius);
+                new Rect(
+                    rocket.OriginX - (TubeRimOffsetX * scale),
+                    rocket.OriginY - (TubeRimOffsetY * scale),
+                    TubeRimWidth * scale,
+                    TubeRimHeight * scale),
+                TubeRimCornerRadius * scale,
+                TubeRimCornerRadius * scale);
             drawingContext.DrawEllipse(
                 TubeInnerBrush,
                 null,
-                new WpfPoint(rocket.OriginX, rocket.OriginY - TubeInnerOffsetY),
-                TubeInnerRadiusX,
-                TubeInnerRadiusY);
+                new WpfPoint(rocket.OriginX, rocket.OriginY - (TubeInnerOffsetY * scale)),
+                TubeInnerRadiusX * scale,
+                TubeInnerRadiusY * scale);
             if (!rocket.FuseHidden)
             {
-                DrawFilledCircle(drawingContext, rocket.X, rocket.Y, FuseGlowRadius, RocketDimGlowBrush);
-                DrawFilledCircle(drawingContext, rocket.X, rocket.Y, FuseCoreRadius, RocketDimCoreBrush);
+                DrawFilledCircle(drawingContext, rocket.X, rocket.Y, FuseGlowRadius * scale, RocketDimGlowBrush);
+                DrawFilledCircle(drawingContext, rocket.X, rocket.Y, FuseCoreRadius * scale, RocketDimCoreBrush);
             }
         }
 
@@ -181,4 +190,4 @@ internal readonly record struct RenderParticle(
     double GlowOpacity,
     double CoreOpacity);
 
-internal readonly record struct RenderRocket(double X, double Y, double OriginX, double OriginY, WpfColor TrailColor, bool FuseHidden);
+internal readonly record struct RenderRocket(double X, double Y, double OriginX, double OriginY, WpfColor TrailColor, bool FuseHidden, double Scale);
