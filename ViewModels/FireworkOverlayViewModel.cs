@@ -39,7 +39,7 @@ internal sealed class FireworkOverlayViewModel
         return count;
     }
 
-    public LaunchPlan BuildLaunchPlan(WpfPoint localPoint, bool forceStarmine, double width, double height)
+    public LaunchPlan BuildLaunchPlan(WpfPoint localPoint, bool forceStarmine, double width, double height, double dipPerDevicePixel)
     {
         if (!forceStarmine)
         {
@@ -56,12 +56,13 @@ internal sealed class FireworkOverlayViewModel
             return new LaunchPlan(false, []);
         }
 
-        var stageScale = GetStageScale(width, height);
+        var stageScale = GetStageScale(width, height, dipPerDevicePixel);
+        var laneOffset = StarmineSideLaneOffset * stageScale * dipPerDevicePixel;
         var centerX = width * 0.5;
         Span<double> lanePositions = stackalloc double[3];
-        lanePositions[0] = Math.Clamp(centerX - (StarmineSideLaneOffset * stageScale), 0, width);
+        lanePositions[0] = Math.Clamp(centerX - laneOffset, 0, width);
         lanePositions[1] = Math.Clamp(centerX, 0, width);
-        lanePositions[2] = Math.Clamp(centerX + (StarmineSideLaneOffset * stageScale), 0, width);
+        lanePositions[2] = Math.Clamp(centerX + laneOffset, 0, width);
 
         Span<int> enabledLaneIndexes = stackalloc int[3];
         enabledLaneCount = 0;
@@ -114,14 +115,16 @@ internal sealed class FireworkOverlayViewModel
         return new LaunchPlan(true, requests);
     }
 
-    private static double GetStageScale(double width, double height)
+    private static double GetStageScale(double width, double height, double dipPerDevicePixel)
     {
-        if (width <= 0 || height <= 0)
+        if (width <= 0 || height <= 0 || dipPerDevicePixel <= 0)
         {
             return 1.0;
         }
 
-        return Math.Min(width / ReferenceWidth, height / ReferenceHeight);
+        var deviceWidth = width / dipPerDevicePixel;
+        var deviceHeight = height / dipPerDevicePixel;
+        return Math.Min(deviceWidth / ReferenceWidth, deviceHeight / ReferenceHeight);
     }
 }
 

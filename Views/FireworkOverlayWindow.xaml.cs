@@ -245,7 +245,11 @@ public partial class FireworkOverlayWindow : Window
     {
         _launchQueue.Clear();
         var localPoint = ScreenToOverlayPoint(screenPoint);
-        var launchPlan = _viewModel.BuildLaunchPlan(localPoint, forceStarmine, Width, Height);
+        var stageScreenPoint = forceStarmine
+            ? OverlayToScreenPoint(new WpfPoint(Width * 0.5, Height * 0.5))
+            : screenPoint;
+        var stageDipPerDevicePixel = GetDipPerDevicePixel(stageScreenPoint);
+        var launchPlan = _viewModel.BuildLaunchPlan(localPoint, forceStarmine, Width, Height, stageDipPerDevicePixel);
         _isStarmineActive = launchPlan.IsStarmineActive;
         foreach (var request in launchPlan.Requests)
         {
