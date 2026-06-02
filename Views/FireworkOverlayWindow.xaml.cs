@@ -15,6 +15,8 @@ namespace CtrlHanabi;
 
 public partial class FireworkOverlayWindow : Window
 {
+    private const double ReferenceWidth = 1920;
+    private const double ReferenceHeight = 1080;
     private const double FrameDeltaSeconds = 0.016;
     private const double PerspectiveDistance = 720;
     private const double MaxDepthOffset = 280;
@@ -48,6 +50,8 @@ public partial class FireworkOverlayWindow : Window
     private const int WsExTransparent = 0x00000020;
     private const int WsExNoActivate = 0x08000000;
     private static readonly nint HwndTopmost = -1;
+    private const uint MonitorDefaultToNearest = 2;
+    private const int MdtEffectiveDpi = 0;
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoActivate = 0x0010;
@@ -205,7 +209,7 @@ public partial class FireworkOverlayWindow : Window
             EmitAscentEffect(rocket, progress);
 
             var startedFalling = rocket.Vy >= 0;
-            var highEnough = rocket.Y <= (rocket.TargetY + 8);
+            var highEnough = rocket.Y <= (rocket.TargetY + ScalePixels(8, rocket.EffectScale));
 
             if (!rocket.FuseStarted && startedFalling && highEnough)
             {
@@ -257,11 +261,13 @@ public partial class FireworkOverlayWindow : Window
         }
 
         var launch = _launchQueue.Dequeue();
+        var screenPoint = OverlayToScreenPoint(new WpfPoint(launch.TargetX, launch.TargetY));
+        var effectScale = GetDipPerDevicePixel(screenPoint) * GetStageScale(screenPoint);
         var launchY = GetLaunchY(new WpfPoint(launch.TargetX, launch.TargetY));
-        var startX = launch.IsStarmine ? launch.TargetX : launch.TargetX + ((_random.NextDouble() - 0.5) * 36);
+        var startX = launch.IsStarmine ? launch.TargetX : launch.TargetX + ((_random.NextDouble() - 0.5) * ScalePixels(36, effectScale));
         var altitudeFactor = 1 - Math.Clamp(launch.TargetY / Math.Max(Height, 1), 0, 1);
         var jitterScale = 1.2 + (altitudeFactor * 2.0);
-        var launchAngleJitter = launch.IsStarmine ? StarmineLaunchAngleJitter : SingleLaunchAngleJitter;
+        var launchAngleJitter = ScalePixels(launch.IsStarmine ? StarmineLaunchAngleJitter : SingleLaunchAngleJitter, effectScale);
         var arcPull = ((launch.TargetX - startX) * 1.8) + ((_random.NextDouble() - 0.5) * launchAngleJitter * jitterScale);
         var travel = Math.Max(launchY - launch.TargetY, 120);
         var curveGuideType = PickCurveGuideType(launch.IsStarmine);
@@ -285,7 +291,7 @@ public partial class FireworkOverlayWindow : Window
             Vy = CalculateRocketLaunchVelocity(travel),
             Vx = arcPull,
             SwayPhase = _random.NextDouble() * Math.PI * 2,
-            HorizontalAccel = (_random.NextDouble() - 0.5) * (RocketMaxHorizontalAccel * 2),
+            HorizontalAccel = (_random.NextDouble() - 0.5) * (ScalePixels(RocketMaxHorizontalAccel, effectScale) * 2),
             BurstDelay = 0,
             FuseHidden = false,
             FuseStarted = false,
@@ -300,13 +306,14 @@ public partial class FireworkOverlayWindow : Window
             ChrysanthemumCharcoalPalette = chrysanthemumCharcoalPalette,
             SilverDragonTone = silverDragonTone,
             IsStarmine = launch.IsStarmine,
-            BurstScale = launch.BurstScale
+            BurstScale = launch.BurstScale,
+            EffectScale = effectScale
         });
 
-        EmitLaunchBlast(startX, launchY);
+        EmitLaunchBlast(startX, launchY, effectScale);
         if (launch.IsStarmine)
         {
-            EmitGroundLeafStars(startX, launchY);
+            EmitGroundLeafStars(startX, launchY, effectScale);
         }
         if (launch.IsStarmine && _launchQueue.Count > 0)
         {
@@ -324,7 +331,7 @@ public partial class FireworkOverlayWindow : Window
         var x = rocket.ApexX;
         var y = rocket.ApexY;
         var petalCount = Math.Max(_viewModel.Settings.ParticleCount * 2, MinimumBurstPetalCount);
-        var outerRadius = _viewModel.Settings.ExplosionRadius * 1.18 * rocket.BurstScale;
+        var outerRadius = ScalePixels(_viewModel.Settings.ExplosionRadius * 1.18, rocket.EffectScale) * rocket.BurstScale;
         var isChrysanthemum = rocket.BurstKind == BurstKind.Chrysanthemum;
         var isBotan = rocket.BurstKind == BurstKind.Botan;
         var isKamuro = rocket.BurstKind == BurstKind.KamuroGiku;
@@ -369,10 +376,10 @@ public partial class FireworkOverlayWindow : Window
                     ? 0.64 + _random.NextDouble() * 0.14
                     : 0.57 + _random.NextDouble() * 0.21,
                 Size = isKamuro
-                    ? 3.2 + _random.NextDouble() * 1.8
+                    ? ScalePixels(3.2 + _random.NextDouble() * 1.8, rocket.EffectScale)
                     : isBotan
-                    ? 3.0 + _random.NextDouble() * 1.5
-                    : 2.4 + _random.NextDouble() * 1.5,
+                    ? ScalePixels(3.0 + _random.NextDouble() * 1.5, rocket.EffectScale)
+                    : ScalePixels(2.4 + _random.NextDouble() * 1.5, rocket.EffectScale),
                 StartColor = isChrysanthemum ? rocket.ChrysanthemumCharcoalPalette.Shell : rocket.BurstPalette.Shell,
                 EndColor = isChrysanthemum ? rocket.ChrysanthemumCharcoalPalette.Outer : rocket.BurstPalette.Outer,
                 TransitionColor = isChrysanthemum
@@ -385,7 +392,8 @@ public partial class FireworkOverlayWindow : Window
                     ? 0.958 + _random.NextDouble() * 0.008
                     : 0.968 + _random.NextDouble() * 0.008,
                 FlickerPhase = _random.NextDouble() * Math.PI * 2,
-                Twinkle = isKamuro ? i % 7 == 0 : isBotan ? i % 14 == 0 : i % 9 == 0
+                Twinkle = isKamuro ? i % 7 == 0 : isBotan ? i % 14 == 0 : i % 9 == 0,
+                EffectScale = rocket.EffectScale
             });
         }
     }
@@ -412,7 +420,7 @@ public partial class FireworkOverlayWindow : Window
                 p.PrevX = p.X;
                 p.PrevY = p.Y;
                 p.PrevZ = p.Z;
-                p.Vy += (82 + age * 20) * FrameDeltaSeconds;
+                p.Vy += ScalePixels(82 + age * 20, p.EffectScale) * FrameDeltaSeconds;
                 p.Vx *= p.Drag;
                 p.Vy *= p.Drag;
                 p.Vz *= p.Drag;
@@ -450,7 +458,7 @@ public partial class FireworkOverlayWindow : Window
                 var dx = p.X - p.PrevX;
                 var dy = p.Y - p.PrevY;
                 var distance = Math.Sqrt((dx * dx) + (dy * dy));
-                var segmentSpacing = Math.Max(1.35, trailSize * 0.55);
+                var segmentSpacing = Math.Max(ScalePixels(1.35, p.EffectScale), trailSize * 0.55);
                 var segments = Math.Clamp((int)Math.Ceiling(distance / segmentSpacing), 1, MaxParticleTrailSegments);
                 var segmentStep = 1.0 / segments;
                 var trailColor = WithAlpha(color, 168);
@@ -465,7 +473,8 @@ public partial class FireworkOverlayWindow : Window
                         p.BurstY,
                         trailLife * (0.9 + segmentT * 0.1),
                         trailSize,
-                        trailColor));
+                        trailColor,
+                        p.EffectScale));
                 }
 
                 _particles[particleWriteIndex--] = p;
@@ -490,7 +499,7 @@ public partial class FireworkOverlayWindow : Window
             var t = _trails[i];
             t.Life -= FrameDeltaSeconds * 1.2;
             t.Size *= 0.992;
-            if (t.Life > 0 && t.Size > 0.8)
+            if (t.Life > 0 && t.Size > ScalePixels(0.8, t.EffectScale))
             {
                 _trails[trailWriteIndex++] = t;
             }
@@ -542,7 +551,7 @@ public partial class FireworkOverlayWindow : Window
         for (var i = 0; i < _activeRockets.Count; i++)
         {
             var rocket = _activeRockets[i];
-            _renderRockets.Add(new RenderRocket(rocket.X, rocket.Y, rocket.OriginX, rocket.OriginY, rocket.TrailColor, rocket.FuseHidden));
+            _renderRockets.Add(new RenderRocket(rocket.X, rocket.Y, rocket.OriginX, rocket.OriginY, rocket.TrailColor, rocket.FuseHidden, rocket.EffectScale));
         }
 
         _scene.UpdateScene(
@@ -751,15 +760,15 @@ public partial class FireworkOverlayWindow : Window
         }
     }
 
-    private void EmitLaunchBlast(double x, double y)
+    private void EmitLaunchBlast(double x, double y, double effectScale)
     {
         for (var i = 0; i < LaunchBlastParticleCount; i++)
         {
             var heat = _random.NextDouble();
             var lift = _random.NextDouble();
-            var spread = 4 + lift * 15;
+            var spread = ScalePixels(4 + lift * 15, effectScale);
             var px = x + ((_random.NextDouble() - 0.5) * spread);
-            var py = y - 7 - (lift * 30) + ((_random.NextDouble() - 0.5) * 5);
+            var py = y - ScalePixels(7 + (lift * 30), effectScale) + ((_random.NextDouble() - 0.5) * ScalePixels(5, effectScale));
             var flame = LerpColor(
                 WpfColor.FromRgb(255, 92, 28),
                 WpfColor.FromRgb(255, 245, 174),
@@ -772,8 +781,9 @@ public partial class FireworkOverlayWindow : Window
                 px,
                 py,
                 0.22 + (_random.NextDouble() * 0.28),
-                4.0 + ((1 - lift) * 7.5) + (_random.NextDouble() * 2.0),
-                WithAlpha(flame, (byte)(170 + _random.Next(70)))));
+                ScalePixels(4.0 + ((1 - lift) * 7.5) + (_random.NextDouble() * 2.0), effectScale),
+                WithAlpha(flame, (byte)(170 + _random.Next(70))),
+                effectScale));
         }
     }
 
@@ -790,7 +800,7 @@ public partial class FireworkOverlayWindow : Window
         var dx = rocket.X - rocket.PrevX;
         var dy = rocket.Y - rocket.PrevY;
         var distance = Math.Sqrt((dx * dx) + (dy * dy));
-        var steps = Math.Clamp((int)Math.Ceiling(distance / 2.8), 1, MaxRocketTrailSegments);
+        var steps = Math.Clamp((int)Math.Ceiling(distance / ScalePixels(2.8, rocket.EffectScale)), 1, MaxRocketTrailSegments);
         for (var i = 1; i <= steps; i++)
         {
             var t = i / (double)steps;
@@ -803,8 +813,9 @@ public partial class FireworkOverlayWindow : Window
                 px,
                 py,
                 1.05 + _random.NextDouble() * 0.5,
-                3.1 + _random.NextDouble() * 1.8,
-                WithAlpha(body, 198)));
+                ScalePixels(3.1 + _random.NextDouble() * 1.8, rocket.EffectScale),
+                WithAlpha(body, 198),
+                rocket.EffectScale));
         }
 
         rocket.PrevX = rocket.X;
@@ -824,11 +835,11 @@ public partial class FireworkOverlayWindow : Window
             return;
         }
 
-        EmitGroundLeafStars(rocket.OriginX, rocket.OriginY);
+        EmitGroundLeafStars(rocket.OriginX, rocket.OriginY, rocket.EffectScale);
         rocket.LastTrailEmitProgress = progress;
     }
 
-    private void EmitGroundLeafStars(double originX, double originY)
+    private void EmitGroundLeafStars(double originX, double originY, double effectScale)
     {
         var transitionColor = PickWeightedBurstPalette().Outer;
         var botanPalette = PickWeightedBurstPalette();
@@ -837,13 +848,13 @@ public partial class FireworkOverlayWindow : Window
         {
             var isBotanStar = _random.NextDouble() < 0.5;
             var kamuroPalette = _kamuroPalettes[_random.Next(_kamuroPalettes.Length)];
-            var baseX = originX + ((_random.NextDouble() - 0.5) * 16);
-            var baseY = originY - (_random.NextDouble() * 1.5);
+            var baseX = originX + ((_random.NextDouble() - 0.5) * ScalePixels(16, effectScale));
+            var baseY = originY - (_random.NextDouble() * ScalePixels(1.5, effectScale));
             var yaw = _random.NextDouble() * Math.PI * 2;
-            var lateralSpeed = 132 + (_random.NextDouble() * 56);
+            var lateralSpeed = ScalePixels(132 + (_random.NextDouble() * 56), effectScale);
             var speedX = Math.Cos(yaw) * lateralSpeed;
             var speedZ = Math.Sin(yaw) * lateralSpeed;
-            var speedY = -((176 + _random.NextDouble() * 6) * 5);
+            var speedY = -ScalePixels((176 + _random.NextDouble() * 6) * 5, effectScale);
 
             _particles.Add(new Particle
             {
@@ -865,8 +876,8 @@ public partial class FireworkOverlayWindow : Window
                     ? 0.64 + _random.NextDouble() * 0.14
                     : 0.57 + _random.NextDouble() * 0.21,
                 Size = isBotanStar
-                    ? 3.0 + _random.NextDouble() * 1.5
-                    : 2.4 + _random.NextDouble() * 1.5,
+                    ? ScalePixels(3.0 + _random.NextDouble() * 1.5, effectScale)
+                    : ScalePixels(2.4 + _random.NextDouble() * 1.5, effectScale),
                 StartColor = isBotanStar ? botanPalette.Shell : kamuroPalette.Shell,
                 EndColor = isBotanStar ? botanPalette.Outer : kamuroPalette.Outer,
                 TransitionColor = isBotanStar ? botanPalette.Outer : transitionColor,
@@ -875,7 +886,8 @@ public partial class FireworkOverlayWindow : Window
                     ? 0.958 + _random.NextDouble() * 0.008
                     : 0.968 + _random.NextDouble() * 0.008,
                 FlickerPhase = _random.NextDouble() * Math.PI * 2,
-                Twinkle = true
+                Twinkle = true,
+                EffectScale = effectScale
             });
         }
     }
@@ -892,11 +904,11 @@ public partial class FireworkOverlayWindow : Window
             return;
         }
 
-        SpawnKobanaBurst(rocket.X, rocket.Y);
+        SpawnKobanaBurst(rocket.X, rocket.Y, rocket.EffectScale);
         rocket.KobanaBurstCount++;
     }
 
-    private void SpawnKobanaBurst(double x, double y)
+    private void SpawnKobanaBurst(double x, double y, double effectScale)
     {
         var color = _burstPalettes[_random.Next(_burstPalettes.Length)];
         for (var i = 0; i < KobanaPetalCount; i++)
@@ -911,20 +923,21 @@ public partial class FireworkOverlayWindow : Window
                 BurstY = y,
                 Kind = BurstKind.Botan,
                 Z = 0,
-                Vx = Math.Cos(angle) * speed,
-                Vy = Math.Sin(angle) * speed,
-                Vz = (_random.NextDouble() - 0.5) * 15,
+                Vx = Math.Cos(angle) * ScalePixels(speed, effectScale),
+                Vy = Math.Sin(angle) * ScalePixels(speed, effectScale),
+                Vz = (_random.NextDouble() - 0.5) * ScalePixels(15, effectScale),
                 Life = 1.0 + _random.NextDouble() * 0.25,
                 InitialLife = 1.0,
                 Decay = 0.9 + _random.NextDouble() * 0.25,
-                Size = 1.5 + _random.NextDouble() * 0.9,
+                Size = ScalePixels(1.5 + _random.NextDouble() * 0.9, effectScale),
                 StartColor = color.Shell,
                 EndColor = color.Outer,
                 TransitionColor = color.Outer,
                 TrailStrength = 0.42,
                 Drag = 0.935 + _random.NextDouble() * 0.02,
                 FlickerPhase = _random.NextDouble() * Math.PI * 2,
-                Twinkle = false
+                Twinkle = false,
+                EffectScale = effectScale
             });
         }
     }
@@ -1033,7 +1046,7 @@ public partial class FireworkOverlayWindow : Window
         var dx = p.X - p.BurstX;
         var dy = p.Y - p.BurstY;
         var radial = Math.Sqrt((dx * dx) + (dy * dy) + (p.Z * p.Z));
-        var radialNorm = Math.Clamp(radial / 220, 0, 1);
+        var radialNorm = Math.Clamp(radial / ScalePixels(220, p.EffectScale), 0, 1);
 
         // Center-out fade: center starts fading first, outer stars fade later.
         var startAge = 0.12 + (radialNorm * 0.20);
@@ -1142,6 +1155,7 @@ public partial class FireworkOverlayWindow : Window
         public SilverDragonTone SilverDragonTone { get; set; }
         public bool IsStarmine { get; set; }
         public double BurstScale { get; set; }
+        public double EffectScale { get; set; } = 1;
     }
 
     private struct Particle
@@ -1176,9 +1190,10 @@ public partial class FireworkOverlayWindow : Window
         public double Drag { get; set; }
         public double FlickerPhase { get; set; }
         public bool Twinkle { get; set; }
+        public double EffectScale { get; set; }
     }
 
-    private struct TrailParticle(double x, double y, double z, double burstX, double burstY, double life, double size, WpfColor color)
+    private struct TrailParticle(double x, double y, double z, double burstX, double burstY, double life, double size, WpfColor color, double effectScale)
     {
         public double X { get; set; } = x;
         public double Y { get; set; } = y;
@@ -1188,6 +1203,41 @@ public partial class FireworkOverlayWindow : Window
         public double Life { get; set; } = life;
         public double Size { get; set; } = size;
         public WpfColor Color { get; set; } = color;
+        public double EffectScale { get; set; } = effectScale;
+    }
+
+    private static double ScalePixels(double value, double effectScale) => value * effectScale;
+
+    private double GetStageScale(WpfPoint screenPoint)
+    {
+        var screen = FormsScreen.FromPoint(new((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y)));
+        var bounds = screen.Bounds;
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return 1.0;
+        }
+
+        return Math.Min(bounds.Width / ReferenceWidth, bounds.Height / ReferenceHeight);
+    }
+
+    private double GetDipPerDevicePixel(WpfPoint screenPoint)
+    {
+        var monitor = MonitorFromPoint(new NativePoint((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y)), MonitorDefaultToNearest);
+        if (monitor != nint.Zero && GetDpiForMonitor(monitor, MdtEffectiveDpi, out var dpiX, out _) == 0 && dpiX > 0)
+        {
+            return 96.0 / dpiX;
+        }
+
+        var source = PresentationSource.FromVisual(this);
+        var dpiScale = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+        return dpiScale <= 0 ? 1.0 : 1.0 / dpiScale;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct NativePoint(int x, int y)
+    {
+        public readonly int X = x;
+        public readonly int Y = y;
     }
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
@@ -1199,5 +1249,11 @@ public partial class FireworkOverlayWindow : Window
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetWindowPos(nint hWnd, nint hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll")]
+    private static extern nint MonitorFromPoint(NativePoint pt, uint dwFlags);
+
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(nint hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
 }

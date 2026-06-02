@@ -6,11 +6,13 @@ namespace CtrlHanabi.ViewModels;
 
 internal sealed class FireworkOverlayViewModel
 {
+    private const double ReferenceWidth = 1920;
+    private const double ReferenceHeight = 1080;
     private const int StarmineFixedShots = 20;
     private const double StarmineBaseIntervalSeconds = 0.2;
     private const double StarmineIntervalJitterSeconds = 0.2;
     private const double StarmineLastPairGapSeconds = 0.05;
-    private static readonly double[] StarmineLaunchXFractions = [0.25, 0.5, 0.75];
+    private const double StarmineSideLaneOffset = 400;
 
     private readonly Random _random = new();
     private readonly ISettingsService _settingsService;
@@ -44,16 +46,28 @@ internal sealed class FireworkOverlayViewModel
             return new LaunchPlan(false, [new LaunchRequest(localPoint.X, localPoint.Y, 0, false)]);
         }
 
-        Span<double> enabledLaneFractions = stackalloc double[3];
         var enabledLaneCount = 0;
-        if (Settings.StarmineLaneLeftEnabled) enabledLaneFractions[enabledLaneCount++] = StarmineLaunchXFractions[0];
-        if (Settings.StarmineLaneCenterEnabled) enabledLaneFractions[enabledLaneCount++] = StarmineLaunchXFractions[1];
-        if (Settings.StarmineLaneRightEnabled) enabledLaneFractions[enabledLaneCount++] = StarmineLaunchXFractions[2];
+        if (Settings.StarmineLaneLeftEnabled) enabledLaneCount++;
+        if (Settings.StarmineLaneCenterEnabled) enabledLaneCount++;
+        if (Settings.StarmineLaneRightEnabled) enabledLaneCount++;
 
         if (enabledLaneCount == 0)
         {
             return new LaunchPlan(false, []);
         }
+
+        var stageScale = GetStageScale(width, height);
+        var centerX = width * 0.5;
+        Span<double> lanePositions = stackalloc double[3];
+        lanePositions[0] = Math.Clamp(centerX - (StarmineSideLaneOffset * stageScale), 0, width);
+        lanePositions[1] = Math.Clamp(centerX, 0, width);
+        lanePositions[2] = Math.Clamp(centerX + (StarmineSideLaneOffset * stageScale), 0, width);
+
+        Span<int> enabledLaneIndexes = stackalloc int[3];
+        enabledLaneCount = 0;
+        if (Settings.StarmineLaneLeftEnabled) enabledLaneIndexes[enabledLaneCount++] = 0;
+        if (Settings.StarmineLaneCenterEnabled) enabledLaneIndexes[enabledLaneCount++] = 1;
+        if (Settings.StarmineLaneRightEnabled) enabledLaneIndexes[enabledLaneCount++] = 2;
 
         var requests = new List<LaunchRequest>(StarmineFixedShots * enabledLaneCount);
         Span<int> laneOrder = stackalloc int[3];
@@ -90,13 +104,24 @@ internal sealed class FireworkOverlayViewModel
 
             for (var orderIndex = 0; orderIndex < enabledLaneCount; orderIndex++)
             {
-                var targetX = width * enabledLaneFractions[laneOrder[orderIndex]];
+                var laneIndex = enabledLaneIndexes[laneOrder[orderIndex]];
+                var targetX = lanePositions[laneIndex];
                 var delay = orderIndex == 0 ? waveDelay : _random.NextDouble() * StarmineIntervalJitterSeconds;
                 requests.Add(new LaunchRequest(targetX, targetY, delay, true, burstScale));
             }
         }
 
         return new LaunchPlan(true, requests);
+    }
+
+    private static double GetStageScale(double width, double height)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            return 1.0;
+        }
+
+        return Math.Min(width / ReferenceWidth, height / ReferenceHeight);
     }
 }
 
