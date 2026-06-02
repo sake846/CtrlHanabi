@@ -595,13 +595,47 @@ public partial class FireworkOverlayWindow : Window
         }
 
         var configuredDisplayIndex = _viewModel.Settings.StarmineDisplayIndex;
-        var zeroBasedIndex = configuredDisplayIndex - 1;
-        if (zeroBasedIndex < 0 || zeroBasedIndex >= screens.Length)
+        foreach (var screen in screens)
         {
-            zeroBasedIndex = 0;
+            if (TryGetWindowsDisplayIndex(screen, out var windowsDisplayIndex) &&
+                windowsDisplayIndex == configuredDisplayIndex)
+            {
+                return screen;
+            }
         }
 
-        return screens[zeroBasedIndex];
+        return screens[0];
+    }
+
+    private static bool TryGetWindowsDisplayIndex(FormsScreen screen, out int displayIndex)
+    {
+        const string displayToken = "DISPLAY";
+
+        var deviceName = screen.DeviceName;
+        var tokenIndex = deviceName.LastIndexOf(displayToken, StringComparison.OrdinalIgnoreCase);
+        if (tokenIndex < 0)
+        {
+            displayIndex = 0;
+            return false;
+        }
+
+        var numberStart = tokenIndex + displayToken.Length;
+        var numberLength = 0;
+        while (numberStart + numberLength < deviceName.Length &&
+               char.IsAsciiDigit(deviceName[numberStart + numberLength]))
+        {
+            numberLength++;
+        }
+
+        if (numberLength == 0 ||
+            !int.TryParse(deviceName.AsSpan(numberStart, numberLength), out displayIndex) ||
+            displayIndex <= 0)
+        {
+            displayIndex = 0;
+            return false;
+        }
+
+        return true;
     }
 
     private double GetLaunchY(WpfPoint screenPoint)
