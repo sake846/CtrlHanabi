@@ -112,14 +112,16 @@ public partial class FireworkOverlayWindow : Window
     {
         _viewModel.ReloadSettings();
         _useConfiguredDisplayBounds = forceStarmine;
+        Show();
+        UpdateLayout();
         ApplyOverlayBounds();
+        UpdateLayout();
         PrepareEffectStorage();
         ClearEffectStorage();
         QueueLaunchPattern(screenPoint, forceStarmine);
         _activeRockets.Clear();
         _launchDelay = 0;
         _started = DateTime.UtcNow;
-        Show();
         BringOverlayToFrontWithoutActivation();
         _timer.Start();
     }
