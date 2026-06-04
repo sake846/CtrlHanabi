@@ -588,15 +588,12 @@ public partial class FireworkOverlayWindow : Window
 
     private void ApplyVirtualScreenBounds()
     {
-        var bounds = DeviceRectToDip(new Rect(
-            SystemParameters.VirtualScreenLeft,
-            SystemParameters.VirtualScreenTop,
-            SystemParameters.VirtualScreenWidth,
-            SystemParameters.VirtualScreenHeight));
-        Left = bounds.Left;
-        Top = bounds.Top;
-        Width = bounds.Width;
-        Height = bounds.Height;
+        // WPF SystemParameters.VirtualScreen* values are already DPI-adjusted DIPs.
+        // Converting them again shrinks the overlay at non-100% display scaling.
+        Left = SystemParameters.VirtualScreenLeft;
+        Top = SystemParameters.VirtualScreenTop;
+        Width = SystemParameters.VirtualScreenWidth;
+        Height = SystemParameters.VirtualScreenHeight;
     }
 
     private void ApplyConfiguredDisplayBounds()
