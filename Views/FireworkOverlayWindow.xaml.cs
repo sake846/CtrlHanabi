@@ -640,7 +640,8 @@ public partial class FireworkOverlayWindow : Window
     private double GetLaunchY(WpfPoint overlayPoint)
     {
         var screenPoint = OverlayToScreenPoint(overlayPoint);
-        var launchScreenPoint = new WpfPoint(screenPoint.X, GetWorkAreaBottom(screenPoint) - 8);
+        var screen = FormsScreen.FromPoint(new((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y)));
+        var launchScreenPoint = new WpfPoint(screenPoint.X, screen.WorkingArea.Bottom - 8);
         return ScreenToOverlayPoint(launchScreenPoint).Y;
     }
 
@@ -1238,51 +1239,11 @@ public partial class FireworkOverlayWindow : Window
         return dpiScale <= 0 ? 1.0 : 1.0 / dpiScale;
     }
 
-    private static double GetWorkAreaBottom(WpfPoint screenPoint)
-    {
-        var monitor = MonitorFromPoint(new NativePoint((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y)), MonitorDefaultToNearest);
-        if (monitor != nint.Zero && TryGetMonitorInfo(monitor, out var monitorInfo))
-        {
-            return monitorInfo.RcWork.Bottom;
-        }
-
-        var screen = FormsScreen.FromPoint(new((int)Math.Round(screenPoint.X), (int)Math.Round(screenPoint.Y)));
-        return screen.WorkingArea.Bottom;
-    }
-
-    private static bool TryGetMonitorInfo(nint monitor, out MonitorInfo monitorInfo)
-    {
-        monitorInfo = new MonitorInfo
-        {
-            CbSize = Marshal.SizeOf<MonitorInfo>()
-        };
-
-        return GetMonitorInfo(monitor, ref monitorInfo);
-    }
-
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct NativePoint(int x, int y)
     {
         public readonly int X = x;
         public readonly int Y = y;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MonitorInfo
-    {
-        public int CbSize;
-        public NativeRect RcMonitor;
-        public NativeRect RcWork;
-        public uint DwFlags;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private readonly struct NativeRect(int left, int top, int right, int bottom)
-    {
-        public readonly int Left = left;
-        public readonly int Top = top;
-        public readonly int Right = right;
-        public readonly int Bottom = bottom;
     }
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
@@ -1297,10 +1258,6 @@ public partial class FireworkOverlayWindow : Window
 
     [DllImport("user32.dll")]
     private static extern nint MonitorFromPoint(NativePoint pt, uint dwFlags);
-
-    [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetMonitorInfo(nint hMonitor, ref MonitorInfo lpmi);
 
     [DllImport("shcore.dll")]
     private static extern int GetDpiForMonitor(nint hmonitor, int dpiType, out uint dpiX, out uint dpiY);
