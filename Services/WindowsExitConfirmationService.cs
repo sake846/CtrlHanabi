@@ -10,13 +10,12 @@ public sealed class WindowsExitConfirmationService : IExitConfirmationService
     private const uint MbSetForeground = 0x00010000;
     private const uint MbTopmost = 0x00040000;
     private const int IdYes = 6;
-    private const string ExitConfirmMessage = "CtrlHanabiを終了しますか？";
 
-    public DialogResult ConfirmExit(string appName)
+    public DialogResult ConfirmExit(string appName, string message)
     {
         var result = MessageBox(
             nint.Zero,
-            ExitConfirmMessage,
+            message,
             appName,
             MbYesNo | MbIconQuestion | MbSetForeground | MbTopmost);
 

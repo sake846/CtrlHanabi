@@ -11,17 +11,13 @@ namespace CtrlHanabi.Services;
 public sealed class AppController : IDisposable
 {
     private const string AppName = "CtrlHanabi";
-    private const string AutoStartMenuText = "Windows起動時に実行";
-    private const string HourlyStarmineMenuText = "毎時スターマインを打ち上げ";
-    private const string ResetSettingsMenuText = "設定をリセット";
-    private const string ExitMenuText = "終了";
-    private const string SettingsResetMessage = "設定を初期値に戻しました。";
 
     private readonly ISettingsService _settingsService;
     private readonly ICursorService _cursorService;
     private readonly IExitConfirmationService _exitConfirmationService;
     private readonly KeyboardDoubleTapDetector _detector;
     private readonly FireworkOverlayWindow _overlay;
+    private readonly AppLocalization _localization;
     private readonly Icon _trayIcon;
     private readonly NotifyIcon _notifyIcon;
     private readonly int _tapThresholdMs;
@@ -43,6 +39,7 @@ public sealed class AppController : IDisposable
         _exitConfirmationService = exitConfirmationService;
 
         var settings = _settingsService.Load();
+        _localization = new AppLocalization(settings);
         _tapThresholdMs = settings.DoubleTapThresholdMs;
         _detector = new KeyboardDoubleTapDetector(settings.DoubleTapThresholdMs);
         _overlay = new FireworkOverlayWindow(settings, _settingsService);
@@ -149,7 +146,7 @@ public sealed class AppController : IDisposable
         var menu = new ContextMenuStrip();
         var settings = _settingsService.Load();
 
-        var launchItem = new ToolStripMenuItem(AutoStartMenuText)
+        var launchItem = new ToolStripMenuItem(_localization.AutoStartMenuText)
         {
             Checked = AutoStartService.IsEnabled(),
             CheckOnClick = true
@@ -166,7 +163,7 @@ public sealed class AppController : IDisposable
             }
         };
 
-        var hourlyStarmineItem = new ToolStripMenuItem(HourlyStarmineMenuText)
+        var hourlyStarmineItem = new ToolStripMenuItem(_localization.HourlyStarmineMenuText)
         {
             Checked = settings.HourlyStarmineEnabled,
             CheckOnClick = true
@@ -177,15 +174,15 @@ public sealed class AppController : IDisposable
             _settingsService.Save(CopySettings(current, hourlyStarmineEnabled: hourlyStarmineItem.Checked));
         };
 
-        var settingsItem = new ToolStripMenuItem(ResetSettingsMenuText);
+        var settingsItem = new ToolStripMenuItem(_localization.ResetSettingsMenuText);
         settingsItem.Click += (_, _) =>
         {
             _settingsService.Save(HanabiSettings.Default);
             hourlyStarmineItem.Checked = HanabiSettings.Default.HourlyStarmineEnabled;
-            System.Windows.MessageBox.Show(SettingsResetMessage, AppName);
+            System.Windows.MessageBox.Show(_localization.SettingsResetMessage, AppName);
         };
 
-        var exitItem = new ToolStripMenuItem(ExitMenuText);
+        var exitItem = new ToolStripMenuItem(_localization.ExitMenuText);
         exitItem.Click += (_, _) => WpfApplication.Current.Dispatcher.Invoke(RequestExit);
 
         menu.Items.Add(launchItem);
@@ -205,7 +202,9 @@ public sealed class AppController : IDisposable
         HourlyStarmineEnabled = hourlyStarmineEnabled,
         StarmineLaneLeftEnabled = settings.StarmineLaneLeftEnabled,
         StarmineLaneCenterEnabled = settings.StarmineLaneCenterEnabled,
-        StarmineLaneRightEnabled = settings.StarmineLaneRightEnabled
+        StarmineLaneRightEnabled = settings.StarmineLaneRightEnabled,
+        StarmineDisplayIndex = settings.StarmineDisplayIndex,
+        UiLanguage = settings.UiLanguage
     };
 
     private void CheckHourlyStarmine(object? state)
@@ -236,7 +235,7 @@ public sealed class AppController : IDisposable
 
     private void RequestExit()
     {
-        var result = _exitConfirmationService.ConfirmExit(AppName);
+        var result = _exitConfirmationService.ConfirmExit(AppName, _localization.ExitConfirmMessage);
 
         if (result != DialogResult.Yes)
         {

@@ -100,7 +100,8 @@ dotnet run
   "StarmineLaneLeftEnabled": true,
   "StarmineLaneCenterEnabled": true,
   "StarmineLaneRightEnabled": true,
-  "StarmineDisplayIndex": 1
+  "StarmineDisplayIndex": 1,
+  "UiLanguage": null
 }
 ```
 
@@ -125,6 +126,8 @@ dotnet run
 - `StarmineDisplayIndex`
   スターマインを表示するディスプレイ番号（1始まり）。範囲外の値は `1` として扱われます
   `1` がメインディスプレイです。`2` 以降は残りのディスプレイをデスクトップ上の並び順で選びます
+- `UiLanguage`
+  メニュー表示言語。`null`、未指定、`"auto"` の場合は Windows の UI 言語から自動判定します。明示指定する場合は `"ja"` または `"en"` を指定できます
 
 注意:
 

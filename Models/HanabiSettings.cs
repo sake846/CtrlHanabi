@@ -17,6 +17,7 @@ public sealed class HanabiSettings
     public bool StarmineLaneCenterEnabled { get; init; } = true;
     public bool StarmineLaneRightEnabled { get; init; } = true;
     public int StarmineDisplayIndex { get; init; } = DefaultStarmineDisplayIndex;
+    public string? UiLanguage { get; init; }
 
     public static HanabiSettings Default => new();
 }

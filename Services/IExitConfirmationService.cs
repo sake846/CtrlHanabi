@@ -4,5 +4,5 @@ namespace CtrlHanabi.Services;
 
 public interface IExitConfirmationService
 {
-    DialogResult ConfirmExit(string appName);
+    DialogResult ConfirmExit(string appName, string message);
 }
