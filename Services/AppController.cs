@@ -58,6 +58,28 @@ public sealed class AppController : IDisposable
         _detector.Start();
         _notifyIcon.Visible = true;
         _hourlyStarmineTimer.Change(TimeSpan.Zero, TimeSpan.FromSeconds(1));
+        _ = ShowStartupFireworkAsync();
+    }
+
+    private async Task ShowStartupFireworkAsync()
+    {
+        await Task.Delay(400);
+
+        var screen = Screen.PrimaryScreen;
+        if (screen is null)
+        {
+            return;
+        }
+
+        var bounds = screen.Bounds;
+        var center = new System.Windows.Point(
+            bounds.Left + (bounds.Width / 2.0),
+            bounds.Top + (bounds.Height * 0.25));
+
+        WpfApplication.Current.Dispatcher.Invoke(() =>
+        {
+            _overlay.ShowFirework(center, forceStarmine: false);
+        });
     }
 
     private void OnDoubleTapDetected(object? sender, EventArgs e)
