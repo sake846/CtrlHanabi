@@ -27,6 +27,13 @@ public partial class FireworkOverlayWindow : Window
     private const double RocketLaunchAverageGravity = 520;
     private const double RocketLaunchVelocityScale = 0.90;
     private const double RocketMaxHorizontalAccel = 16;
+    private const double RocketBaseAirDrag = 0.992;
+    private const double RocketVerticalAirDrag = 0.985;
+    private const double RocketLateralAirDrag = 0.972;
+    private const double RocketSwayFrequency = 5.4;
+    private const double RocketSwayStrength = 22;
+    private const double RocketWindShiftStrength = 11;
+    private const double RocketLateRiseDragProgress = 0.38;
     private const int MinimumBurstPetalCount = 168;
     private const int LaunchBlastParticleCount = 34;
     private const int KobanaPetalCount = 12;
@@ -204,10 +211,22 @@ public partial class FireworkOverlayWindow : Window
             var totalRise = Math.Max(rocket.OriginY - rocket.TargetY, 1);
             var progress = Math.Clamp((rocket.OriginY - rocket.Y) / totalRise, 0, 1);
             var gravity = RocketBaseGravity + (progress * RocketProgressGravity);
+            var sway = Math.Sin(rocket.SwayPhase + (rocket.SwayTime * RocketSwayFrequency));
+            var windShift = Math.Sin(rocket.WindPhase + (rocket.SwayTime * (RocketSwayFrequency * 0.47)));
+            var driftFactor = 0.35 + (progress * 0.85);
+            var dragBlend = Math.Clamp((progress - RocketLateRiseDragProgress) / (1 - RocketLateRiseDragProgress), 0, 1);
+            var lateralDrag = Lerp(RocketBaseAirDrag, RocketLateralAirDrag, dragBlend);
+            var verticalDrag = Lerp(RocketBaseAirDrag, RocketVerticalAirDrag, dragBlend);
+
+            rocket.Vx += sway * ScalePixels(RocketSwayStrength * driftFactor, rocket.EffectScale) * FrameDeltaSeconds;
+            rocket.Vx += windShift * ScalePixels(RocketWindShiftStrength * driftFactor, rocket.EffectScale) * FrameDeltaSeconds;
             rocket.Vy += gravity * FrameDeltaSeconds;
             rocket.Vx += rocket.HorizontalAccel * FrameDeltaSeconds;
+            rocket.Vx *= lateralDrag;
+            rocket.Vy *= verticalDrag;
             rocket.X += rocket.Vx * FrameDeltaSeconds;
             rocket.Y += rocket.Vy * FrameDeltaSeconds;
+            rocket.SwayTime += FrameDeltaSeconds;
             EmitAscentEffect(rocket, progress);
 
             var startedFalling = rocket.Vy >= 0;
@@ -297,6 +316,8 @@ public partial class FireworkOverlayWindow : Window
             Vy = CalculateRocketLaunchVelocity(travel),
             Vx = arcPull,
             SwayPhase = _random.NextDouble() * Math.PI * 2,
+            WindPhase = _random.NextDouble() * Math.PI * 2,
+            SwayTime = _random.NextDouble() * 0.45,
             HorizontalAccel = (_random.NextDouble() - 0.5) * (ScalePixels(RocketMaxHorizontalAccel, effectScale) * 2),
             BurstDelay = 0,
             FuseHidden = false,
@@ -978,6 +999,9 @@ public partial class FireworkOverlayWindow : Window
             (byte)Math.Round(from.B + (to.B - from.B) * t));
     }
 
+    private static double Lerp(double from, double to, double t)
+        => from + ((to - from) * Math.Clamp(t, 0, 1));
+
     private static WpfColor WithAlpha(WpfColor color, byte alpha) => WpfColor.FromArgb(alpha, color.R, color.G, color.B);
 
     private static WpfColor GetParticleColor(Particle particle, double age)
@@ -1143,6 +1167,8 @@ public partial class FireworkOverlayWindow : Window
         public double Vy { get; set; }
         public double HorizontalAccel { get; set; }
         public double SwayPhase { get; set; }
+        public double WindPhase { get; set; }
+        public double SwayTime { get; set; }
         public double BurstDelay { get; set; }
         public bool FuseHidden { get; set; }
         public bool FuseStarted { get; set; }
