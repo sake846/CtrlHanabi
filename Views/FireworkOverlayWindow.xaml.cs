@@ -28,11 +28,11 @@ public partial class FireworkOverlayWindow : Window
     private const double RocketLaunchVelocityScale = 0.90;
     private const double RocketMaxHorizontalAccel = 16;
     private const double RocketBaseAirDrag = 0.992;
-    private const double RocketVerticalAirDrag = 0.985;
-    private const double RocketLateralAirDrag = 0.972;
+    private const double RocketVerticalAirDrag = 0.998;
+    private const double RocketLateralAirDrag = 0.978;
     private const double RocketSwayFrequency = 5.4;
-    private const double RocketSwayStrength = 22;
-    private const double RocketWindShiftStrength = 11;
+    private const double RocketSwayStrength = 36;
+    private const double RocketWindShiftStrength = 18;
     private const double RocketLateRiseDragProgress = 0.38;
     private const int MinimumBurstPetalCount = 168;
     private const int LaunchBlastParticleCount = 34;
