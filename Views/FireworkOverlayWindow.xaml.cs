@@ -230,9 +230,8 @@ public partial class FireworkOverlayWindow : Window
             EmitAscentEffect(rocket, progress);
 
             var startedFalling = rocket.Vy >= 0;
-            var highEnough = rocket.Y <= (rocket.TargetY + ScalePixels(8, rocket.EffectScale));
 
-            if (!rocket.FuseStarted && startedFalling && highEnough)
+            if (!rocket.FuseStarted && startedFalling)
             {
                 rocket.FuseStarted = true;
                 rocket.ApexX = rocket.X;
@@ -1033,7 +1032,58 @@ public partial class FireworkOverlayWindow : Window
 
     private static double CalculateRocketLaunchVelocity(double travel)
     {
-        return -Math.Sqrt(2 * RocketLaunchAverageGravity * travel) * RocketLaunchVelocityScale;
+        var low = Math.Sqrt(2 * RocketLaunchAverageGravity * travel) * RocketLaunchVelocityScale;
+        var high = low;
+
+        while (SimulateRocketApexRise(high, travel) < travel)
+        {
+            high *= 1.12;
+            if (high > 4000)
+            {
+                break;
+            }
+        }
+
+        for (var i = 0; i < 20; i++)
+        {
+            var mid = (low + high) * 0.5;
+            if (SimulateRocketApexRise(mid, travel) < travel)
+            {
+                low = mid;
+            }
+            else
+            {
+                high = mid;
+            }
+        }
+
+        return -high;
+    }
+
+    private static double SimulateRocketApexRise(double launchSpeed, double travel)
+    {
+        var y = 0.0;
+        var vy = -launchSpeed;
+        var totalRise = Math.Max(travel, 1);
+
+        for (var i = 0; i < 240; i++)
+        {
+            var progress = Math.Clamp(-y / totalRise, 0, 1);
+            var gravity = RocketBaseGravity + (progress * RocketProgressGravity);
+            var dragBlend = Math.Clamp((progress - RocketLateRiseDragProgress) / (1 - RocketLateRiseDragProgress), 0, 1);
+            var verticalDrag = Lerp(RocketBaseAirDrag, RocketVerticalAirDrag, dragBlend);
+
+            vy += gravity * FrameDeltaSeconds;
+            vy *= verticalDrag;
+            y += vy * FrameDeltaSeconds;
+
+            if (vy >= 0)
+            {
+                break;
+            }
+        }
+
+        return -y;
     }
 
     private static double GetBotanBloomFactor(double age)
