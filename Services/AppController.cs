@@ -183,6 +183,8 @@ public sealed class AppController : IDisposable
             {
                 AutoStartService.Disable();
             }
+
+            launchItem.Checked = AutoStartService.IsEnabled();
         };
 
         var hourlyStarmineItem = new ToolStripMenuItem(_localization.HourlyStarmineMenuText)
@@ -212,6 +214,10 @@ public sealed class AppController : IDisposable
         menu.Items.Add(settingsItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exitItem);
+        menu.Opening += (_, _) =>
+        {
+            launchItem.Checked = AutoStartService.IsEnabled();
+        };
         return menu;
     }
 
