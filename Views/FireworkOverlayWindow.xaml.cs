@@ -869,15 +869,13 @@ public partial class FireworkOverlayWindow : Window
 
         for (var i = 0; i < GroundLeafStarBurstCount; i++)
         {
-            var isBotanStar = _random.NextDouble() < 0.5;
-            var kamuroPalette = _kamuroPalettes[_random.Next(_kamuroPalettes.Length)];
             var baseX = originX + ((_random.NextDouble() - 0.5) * ScalePixels(16, effectScale));
             var baseY = originY - (_random.NextDouble() * ScalePixels(1.5, effectScale));
             var yaw = _random.NextDouble() * Math.PI * 2;
             var lateralSpeed = ScalePixels(132 + (_random.NextDouble() * 56), effectScale);
             var speedX = Math.Cos(yaw) * lateralSpeed;
             var speedZ = Math.Sin(yaw) * lateralSpeed;
-            var speedY = -ScalePixels((176 + _random.NextDouble() * 6) * 5, effectScale);
+            var speedY = -ScalePixels(152 * 5, effectScale);
 
             _particles.Add(new Particle
             {
@@ -887,7 +885,7 @@ public partial class FireworkOverlayWindow : Window
                 PrevY = baseY,
                 BurstX = baseX,
                 BurstY = baseY,
-                Kind = isBotanStar ? BurstKind.Botan : BurstKind.Chrysanthemum,
+                Kind = BurstKind.Botan,
                 Z = 0,
                 PrevZ = 0,
                 Vx = speedX,
@@ -895,19 +893,13 @@ public partial class FireworkOverlayWindow : Window
                 Vz = speedZ,
                 Life = 1,
                 InitialLife = 1,
-                Decay = isBotanStar
-                    ? 0.64 + _random.NextDouble() * 0.14
-                    : 0.57 + _random.NextDouble() * 0.21,
-                Size = isBotanStar
-                    ? ScalePixels(3.0 + _random.NextDouble() * 1.5, effectScale)
-                    : ScalePixels(2.4 + _random.NextDouble() * 1.5, effectScale),
-                StartColor = isBotanStar ? botanPalette.Shell : kamuroPalette.Shell,
-                EndColor = isBotanStar ? botanPalette.Outer : kamuroPalette.Outer,
-                TransitionColor = isBotanStar ? botanPalette.Outer : transitionColor,
-                TrailStrength = isBotanStar ? 0.8 : 1.45,
-                Drag = isBotanStar
-                    ? 0.958 + _random.NextDouble() * 0.008
-                    : 0.968 + _random.NextDouble() * 0.008,
+                Decay = 0.64 + _random.NextDouble() * 0.14,
+                Size = ScalePixels(3.0 + _random.NextDouble() * 1.5, effectScale),
+                StartColor = botanPalette.Shell,
+                EndColor = botanPalette.Outer,
+                TransitionColor = botanPalette.Outer,
+                TrailStrength = 0.8,
+                Drag = 0.958 + _random.NextDouble() * 0.008,
                 FlickerPhase = _random.NextDouble() * Math.PI * 2,
                 Twinkle = true,
                 EffectScale = effectScale
