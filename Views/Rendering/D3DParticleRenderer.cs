@@ -74,6 +74,21 @@ internal sealed class D3DParticleRenderer : IDisposable
     private int _softRingInstanceCapacity;
     private bool _isDisposed;
     private bool _direct3D11Failed;
+    private bool _hasDeviceCreated;
+
+    public D3DParticleRenderer()
+    {
+        _image.IsFrontBufferAvailableChanged += OnIsFrontBufferAvailableChanged;
+    }
+
+    private void OnIsFrontBufferAvailableChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (_image.IsFrontBufferAvailable)
+        {
+            _direct3D11Failed = false;
+            ReleaseDirect3DResources();
+        }
+    }
 
     public ImageSource Image => _image;
 
@@ -87,7 +102,7 @@ internal sealed class D3DParticleRenderer : IDisposable
             return false;
         }
 
-        if (!Direct3D11Enabled || _direct3D11Failed)
+        if (!Direct3D11Enabled || _direct3D11Failed || !_image.IsFrontBufferAvailable)
         {
             return false;
         }
@@ -121,7 +136,10 @@ internal sealed class D3DParticleRenderer : IDisposable
         catch (Exception ex)
         {
             Log("Render failed: " + ex);
-            _direct3D11Failed = true;
+            if (!_hasDeviceCreated)
+            {
+                _direct3D11Failed = true;
+            }
             ReleaseDirect3DResources();
             return false;
         }
@@ -149,6 +167,7 @@ internal sealed class D3DParticleRenderer : IDisposable
     public void Dispose()
     {
         _isDisposed = true;
+        _image.IsFrontBufferAvailableChanged -= OnIsFrontBufferAvailableChanged;
         ReleaseDirect3DResources();
     }
 
@@ -192,6 +211,7 @@ internal sealed class D3DParticleRenderer : IDisposable
             }
 
             (_device11, _context11) = D3D11.CreateDevice();
+            _hasDeviceCreated = true;
             Log("D3D11 device created");
             CreatePipeline();
             Log("D3D11 pipeline created");
