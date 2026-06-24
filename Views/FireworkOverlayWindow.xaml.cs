@@ -664,8 +664,139 @@ public partial class FireworkOverlayWindow : Window
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e)
     {
+        var previousBounds = new Rect(Left, Top, Width, Height);
         _viewModel.ReloadSettings();
         ApplyOverlayBounds();
+        RemapActiveEffect(previousBounds);
+        BringOverlayToFrontWithoutActivation();
+    }
+
+    private void RemapActiveEffect(Rect previousBounds)
+    {
+        if (previousBounds.IsEmpty || previousBounds.Width <= 0 || previousBounds.Height <= 0)
+        {
+            return;
+        }
+
+        if (_activeRockets.Count == 0 && _launchQueue.Count == 0 && _particles.Count == 0 && _trails.Count == 0)
+        {
+            return;
+        }
+
+        var dx = previousBounds.Left - Left;
+        var dy = previousBounds.Top - Top;
+        TranslateActiveEffect(dx, dy);
+
+        var keepVisibleOffset = GetKeepVisibleOffset();
+        if (keepVisibleOffset.X != 0 || keepVisibleOffset.Y != 0)
+        {
+            TranslateActiveEffect(keepVisibleOffset.X, keepVisibleOffset.Y);
+        }
+
+        _gpuParticlePhysics.Reset();
+    }
+
+    private Vector GetKeepVisibleOffset()
+    {
+        var anchor = GetEffectAnchor();
+        if (anchor is null || Width <= 0 || Height <= 0)
+        {
+            return default;
+        }
+
+        const double margin = 24;
+        var x = Math.Clamp(anchor.Value.X, margin, Math.Max(margin, Width - margin));
+        var y = Math.Clamp(anchor.Value.Y, margin, Math.Max(margin, Height - margin));
+        return new Vector(x - anchor.Value.X, y - anchor.Value.Y);
+    }
+
+    private WpfPoint? GetEffectAnchor()
+    {
+        if (_activeRockets.Count > 0)
+        {
+            var rocket = _activeRockets[^1];
+            return new WpfPoint(rocket.X, rocket.Y);
+        }
+
+        if (_particles.Count > 0)
+        {
+            var particle = _particles[^1];
+            return new WpfPoint(particle.BurstX, particle.BurstY);
+        }
+
+        if (_trails.Count > 0)
+        {
+            var trail = _trails[^1];
+            return new WpfPoint(trail.BurstX, trail.BurstY);
+        }
+
+        if (_launchQueue.Count > 0)
+        {
+            var launch = _launchQueue.Peek();
+            return new WpfPoint(launch.TargetX, launch.TargetY);
+        }
+
+        return null;
+    }
+
+    private void TranslateActiveEffect(double dx, double dy)
+    {
+        if (dx == 0 && dy == 0)
+        {
+            return;
+        }
+
+        for (var i = 0; i < _activeRockets.Count; i++)
+        {
+            var rocket = _activeRockets[i];
+            rocket.X += dx;
+            rocket.Y += dy;
+            rocket.OriginX += dx;
+            rocket.OriginY += dy;
+            rocket.TargetX += dx;
+            rocket.TargetY += dy;
+            rocket.ApexX += dx;
+            rocket.ApexY += dy;
+            rocket.PrevX += dx;
+            rocket.PrevY += dy;
+            _activeRockets[i] = rocket;
+        }
+
+        for (var i = 0; i < _particles.Count; i++)
+        {
+            var particle = _particles[i];
+            particle.X += dx;
+            particle.Y += dy;
+            particle.PrevX += dx;
+            particle.PrevY += dy;
+            particle.BurstX += dx;
+            particle.BurstY += dy;
+            _particles[i] = particle;
+        }
+
+        for (var i = 0; i < _trails.Count; i++)
+        {
+            var trail = _trails[i];
+            trail.X += dx;
+            trail.Y += dy;
+            trail.BurstX += dx;
+            trail.BurstY += dy;
+            _trails[i] = trail;
+        }
+
+        if (_launchQueue.Count > 0)
+        {
+            var launches = _launchQueue.ToArray();
+            _launchQueue.Clear();
+            foreach (var launch in launches)
+            {
+                _launchQueue.Enqueue(launch with
+                {
+                    TargetX = launch.TargetX + dx,
+                    TargetY = launch.TargetY + dy
+                });
+            }
+        }
     }
 
     private static void LogOverlayFailure(string message)
