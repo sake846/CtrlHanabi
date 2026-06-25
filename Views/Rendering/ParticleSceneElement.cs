@@ -101,6 +101,10 @@ internal sealed class ParticleSceneElement : FrameworkElement
         {
             drawingContext.DrawImage(_particleRenderer.Image, new Rect(0, 0, ActualWidth, ActualHeight));
         }
+        else
+        {
+            DrawFallbackParticles(drawingContext);
+        }
 
         foreach (var rocket in _rockets)
         {
@@ -138,6 +142,42 @@ internal sealed class ParticleSceneElement : FrameworkElement
             }
         }
 
+    }
+
+    private void DrawFallbackParticles(DrawingContext drawingContext)
+    {
+        foreach (var trail in _trails)
+        {
+            var brush = CreateFallbackBrush(trail.Color, trail.Opacity);
+            DrawFilledCircle(drawingContext, trail.X, trail.Y, trail.Size, brush);
+        }
+
+        foreach (var particle in _particles)
+        {
+            if (particle.GlowOpacity > 0)
+            {
+                var glowBrush = CreateFallbackBrush(particle.GlowColor, particle.GlowOpacity);
+                DrawFilledCircle(drawingContext, particle.X, particle.Y, particle.GlowSize, glowBrush);
+            }
+
+            if (particle.CoreOpacity > 0)
+            {
+                var coreBrush = CreateFallbackBrush(particle.CoreColor, particle.CoreOpacity);
+                DrawFilledCircle(drawingContext, particle.X, particle.Y, particle.CoreSize, coreBrush);
+            }
+        }
+    }
+
+    private static WpfBrush CreateFallbackBrush(WpfColor color, double opacity)
+    {
+        var alpha = (byte)Math.Round(color.A * Math.Clamp(opacity, 0, 1));
+        var brush = new SolidColorBrush(WpfColor.FromArgb(alpha, color.R, color.G, color.B));
+        if (brush.CanFreeze)
+        {
+            brush.Freeze();
+        }
+
+        return brush;
     }
 
     private static WpfBrush CreateFrozenBrush(WpfColor color)

@@ -665,6 +665,7 @@ public partial class FireworkOverlayWindow : Window
     private void OnDisplaySettingsChanged(object? sender, EventArgs e)
     {
         var previousBounds = new Rect(Left, Top, Width, Height);
+        BurstApexRocketsBeforeDisplayChange();
         _viewModel.ReloadSettings();
         ApplyOverlayBounds();
         RemapActiveEffect(previousBounds);
@@ -683,9 +684,16 @@ public partial class FireworkOverlayWindow : Window
             return;
         }
 
-        var dx = previousBounds.Left - Left;
-        var dy = previousBounds.Top - Top;
-        TranslateActiveEffect(dx, dy);
+        if (ShouldScaleActiveEffect(previousBounds))
+        {
+            ScaleActiveEffect(Width / previousBounds.Width, Height / previousBounds.Height);
+        }
+        else
+        {
+            var dx = previousBounds.Left - Left;
+            var dy = previousBounds.Top - Top;
+            TranslateActiveEffect(dx, dy);
+        }
 
         var keepVisibleOffset = GetKeepVisibleOffset();
         if (keepVisibleOffset.X != 0 || keepVisibleOffset.Y != 0)
@@ -694,6 +702,113 @@ public partial class FireworkOverlayWindow : Window
         }
 
         _gpuParticlePhysics.Reset();
+    }
+
+    private void BurstApexRocketsBeforeDisplayChange()
+    {
+        for (var i = _activeRockets.Count - 1; i >= 0; i--)
+        {
+            var rocket = _activeRockets[i];
+            var totalRise = Math.Max(rocket.OriginY - rocket.TargetY, 1);
+            var progress = Math.Clamp((rocket.OriginY - rocket.Y) / totalRise, 0, 1);
+            if (!rocket.FuseStarted && rocket.Vy < 0 && progress < 0.92)
+            {
+                continue;
+            }
+
+            if (!rocket.FuseStarted)
+            {
+                rocket.FuseStarted = true;
+                rocket.ApexX = rocket.X;
+                rocket.ApexY = rocket.Y;
+            }
+
+            SpawnBurst(rocket);
+            _activeRockets.RemoveAt(i);
+        }
+    }
+
+    private bool ShouldScaleActiveEffect(Rect previousBounds)
+    {
+        const double originTolerance = 2;
+        const double sizeTolerance = 2;
+        var sameOrigin =
+            Math.Abs(previousBounds.Left - Left) <= originTolerance &&
+            Math.Abs(previousBounds.Top - Top) <= originTolerance;
+        var sizeChanged =
+            Math.Abs(previousBounds.Width - Width) > sizeTolerance ||
+            Math.Abs(previousBounds.Height - Height) > sizeTolerance;
+        return sameOrigin && sizeChanged && Width > 0 && Height > 0;
+    }
+
+    private void ScaleActiveEffect(double scaleX, double scaleY)
+    {
+        if (scaleX <= 0 || scaleY <= 0 || (scaleX == 1 && scaleY == 1))
+        {
+            return;
+        }
+
+        for (var i = 0; i < _activeRockets.Count; i++)
+        {
+            var rocket = _activeRockets[i];
+            rocket.X *= scaleX;
+            rocket.Y *= scaleY;
+            rocket.OriginX *= scaleX;
+            rocket.OriginY *= scaleY;
+            rocket.TargetX *= scaleX;
+            rocket.TargetY *= scaleY;
+            rocket.ApexX *= scaleX;
+            rocket.ApexY *= scaleY;
+            rocket.PrevX *= scaleX;
+            rocket.PrevY *= scaleY;
+            rocket.Vx *= scaleX;
+            rocket.Vy *= scaleY;
+            rocket.HorizontalAccel *= scaleX;
+            _activeRockets[i] = rocket;
+        }
+
+        var sizeScale = Math.Sqrt(scaleX * scaleY);
+        for (var i = 0; i < _particles.Count; i++)
+        {
+            var particle = _particles[i];
+            particle.X *= scaleX;
+            particle.Y *= scaleY;
+            particle.PrevX *= scaleX;
+            particle.PrevY *= scaleY;
+            particle.BurstX *= scaleX;
+            particle.BurstY *= scaleY;
+            particle.Vx *= scaleX;
+            particle.Vy *= scaleY;
+            particle.Size *= sizeScale;
+            particle.RenderGlowSize *= sizeScale;
+            particle.RenderCoreSize *= sizeScale;
+            _particles[i] = particle;
+        }
+
+        for (var i = 0; i < _trails.Count; i++)
+        {
+            var trail = _trails[i];
+            trail.X *= scaleX;
+            trail.Y *= scaleY;
+            trail.BurstX *= scaleX;
+            trail.BurstY *= scaleY;
+            trail.Size *= sizeScale;
+            _trails[i] = trail;
+        }
+
+        if (_launchQueue.Count > 0)
+        {
+            var launches = _launchQueue.ToArray();
+            _launchQueue.Clear();
+            foreach (var launch in launches)
+            {
+                _launchQueue.Enqueue(launch with
+                {
+                    TargetX = launch.TargetX * scaleX,
+                    TargetY = launch.TargetY * scaleY
+                });
+            }
+        }
     }
 
     private Vector GetKeepVisibleOffset()
