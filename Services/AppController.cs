@@ -11,6 +11,11 @@ namespace CtrlHanabi.Services;
 public sealed class AppController : IDisposable
 {
     private const string AppName = "CtrlHanabi";
+    private const int StartupFireworkDelayMs = 400;
+    private const int DoubleTapGraceBufferMs = 10;
+    private const int StarmineTriggerMinute = 59;
+    private const int StarmineTriggerStartSecond = 30;
+    private const int StarmineTriggerEndSecond = 34;
 
     private readonly ISettingsService _settingsService;
     private readonly ICursorService _cursorService;
@@ -63,7 +68,7 @@ public sealed class AppController : IDisposable
 
     private async Task ShowStartupFireworkAsync()
     {
-        await Task.Delay(400);
+        await Task.Delay(StartupFireworkDelayMs);
 
         var screen = Screen.PrimaryScreen;
         if (screen is null)
@@ -92,28 +97,14 @@ public sealed class AppController : IDisposable
     private void OnTripleTapDetected(object? sender, EventArgs e)
     {
         _doubleTapCts?.Cancel();
-
-        var settings = _settingsService.Load();
-        if ((DateTime.UtcNow - _lastTrigger).TotalMilliseconds < settings.CooldownMs)
-        {
-            return;
-        }
-
-        _lastTrigger = DateTime.UtcNow;
-
-        var mouse = _cursorService.GetCursorScreenPoint();
-
-        WpfApplication.Current.Dispatcher.Invoke(() =>
-        {
-            _overlay.ShowFirework(mouse, forceStarmine: true);
-        });
+        TriggerFirework(forceStarmine: true);
     }
 
     private async Task FireDoubleTapAfterGraceAsync(CancellationToken cancellationToken)
     {
         try
         {
-            await Task.Delay(_tapThresholdMs + 10, cancellationToken);
+            await Task.Delay(_tapThresholdMs + DoubleTapGraceBufferMs, cancellationToken);
         }
         catch (TaskCanceledException)
         {
@@ -125,6 +116,11 @@ public sealed class AppController : IDisposable
             return;
         }
 
+        TriggerFirework(forceStarmine: false);
+    }
+
+    private void TriggerFirework(bool forceStarmine)
+    {
         var settings = _settingsService.Load();
         if ((DateTime.UtcNow - _lastTrigger).TotalMilliseconds < settings.CooldownMs)
         {
@@ -136,7 +132,7 @@ public sealed class AppController : IDisposable
 
         WpfApplication.Current.Dispatcher.Invoke(() =>
         {
-            _overlay.ShowFirework(mouse, forceStarmine: false);
+            _overlay.ShowFirework(mouse, forceStarmine: forceStarmine);
         });
     }
 
@@ -238,7 +234,7 @@ public sealed class AppController : IDisposable
     private void CheckHourlyStarmine(object? state)
     {
         var now = DateTime.Now;
-        if (now.Minute != 59 || now.Second < 30 || now.Second > 34)
+        if (now.Minute != StarmineTriggerMinute || now.Second < StarmineTriggerStartSecond || now.Second > StarmineTriggerEndSecond)
         {
             return;
         }

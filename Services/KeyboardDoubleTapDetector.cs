@@ -53,20 +53,27 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
 
     private nint HookCallback(int nCode, nint wParam, nint lParam)
     {
-        if (nCode >= 0)
+        if (nCode < 0)
         {
-            var vkCode = Marshal.ReadInt32(lParam);
-            if (vkCode is VkLControl or VkRControl)
+            return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
+        }
+
+        var vkCode = Marshal.ReadInt32(lParam);
+        if (vkCode is not (VkLControl or VkRControl))
+        {
+            return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
+        }
+
+        if (wParam == WmKeyDown || wParam == WmSysKeyDown)
+        {
+            if (MarkCtrlDown(vkCode))
             {
-                if ((wParam == WmKeyDown || wParam == WmSysKeyDown) && MarkCtrlDown(vkCode))
-                {
-                    ProcessCtrlDown(DateTime.UtcNow);
-                }
-                else if (wParam == WmKeyUp || wParam == WmSysKeyUp)
-                {
-                    MarkCtrlUp(vkCode);
-                }
+                ProcessCtrlDown(DateTime.UtcNow);
             }
+        }
+        else if (wParam == WmKeyUp || wParam == WmSysKeyUp)
+        {
+            MarkCtrlUp(vkCode);
         }
 
         return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
@@ -137,34 +144,33 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
             }
 
             _lastObservedCtrlDownUtc = now;
-            if ((now - _lastCtrlDownUtc).TotalMilliseconds <= _thresholdMs)
+            if ((now - _lastCtrlDownUtc).TotalMilliseconds > _thresholdMs)
             {
-                _ctrlTapCount++;
+                _ctrlTapCount = 1;
+                _lastCtrlDownUtc = now;
+                return;
+            }
 
-                if (_ctrlTapCount == DoubleTapCount)
-                {
-                    doubleTapDetected = DoubleTapDetected;
-                }
+            _ctrlTapCount++;
 
-                if (_ctrlTapCount == TripleTapCount)
-                {
-                    tripleTapDetected = TripleTapDetected;
-                }
+            if (_ctrlTapCount == DoubleTapCount)
+            {
+                doubleTapDetected = DoubleTapDetected;
+            }
 
-                if (_ctrlTapCount >= FiveTapCount)
-                {
-                    fiveTapDetected = FiveTapDetected;
-                    _ctrlTapCount = 0;
-                    _lastCtrlDownUtc = DateTime.MinValue;
-                }
-                else
-                {
-                    _lastCtrlDownUtc = now;
-                }
+            if (_ctrlTapCount == TripleTapCount)
+            {
+                tripleTapDetected = TripleTapDetected;
+            }
+
+            if (_ctrlTapCount >= FiveTapCount)
+            {
+                fiveTapDetected = FiveTapDetected;
+                _ctrlTapCount = 0;
+                _lastCtrlDownUtc = DateTime.MinValue;
             }
             else
             {
-                _ctrlTapCount = 1;
                 _lastCtrlDownUtc = now;
             }
         }
