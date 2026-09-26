@@ -44,15 +44,12 @@ public partial class FireworkOverlayWindow : Window
     private const int MaxParticleTrailSegments = 4;
     private const int MaxRocketTrailSegments = 8;
     private static readonly double[] KobanaBurstProgressThresholds = [0.50, 0.68, 0.82];
-    private const int StarmineMaxShots = 7;
     private const double StarmineIntervalJitterSeconds = 0.2;
     private const double LeafAscentEmitProgressStep = 0.064;
     private const int GroundLeafStarBurstCount = 8;
     private const double StarmineLaunchAngleJitter = 50;
     private const double SingleLaunchAngleJitter = 10;
     private const int MaxConcurrentRockets = 15;
-    private const bool DisableGpuPhysicsDuringStarmine = false;
-
     private const int GwlExStyle = -20;
     private const int WsExTransparent = 0x00000020;
     private const int WsExNoActivate = 0x08000000;
@@ -125,7 +122,7 @@ public partial class FireworkOverlayWindow : Window
         UpdateLayout();
         ApplyOverlayBounds();
         UpdateLayout();
-        PrepareEffectStorage();
+        PrepareEffectStorage(forceStarmine);
         ClearEffectStorage();
         QueueLaunchPattern(screenPoint, forceStarmine);
         _activeRockets.Clear();
@@ -323,7 +320,6 @@ public partial class FireworkOverlayWindow : Window
             BurstDelay = 0,
             FuseHidden = false,
             FuseStarted = false,
-            TrailColor = burstPalette.Outer,
             CurveGuide = curveGuideType,
             LastTrailEmitProgress = 0,
             KobanaBurstCount = 0,
@@ -428,15 +424,7 @@ public partial class FireworkOverlayWindow : Window
 
     private void UpdateParticles()
     {
-        var useGpuPhysics = !_isStarmineActive || !DisableGpuPhysicsDuringStarmine;
-        if (!useGpuPhysics)
-        {
-            _gpuParticlePhysics.Reset();
-        }
-
-        var gpuIntegratedParticleCount = useGpuPhysics
-            ? _gpuParticlePhysics.TryApplyPending(_particles)
-            : 0;
+        var gpuIntegratedParticleCount = _gpuParticlePhysics.TryApplyPending(_particles);
         var particleCountBeforeUpdate = _particles.Count;
         var particleWriteIndex = _particles.Count - 1;
         for (var i = _particles.Count - 1; i >= 0; i--)
@@ -514,12 +502,9 @@ public partial class FireworkOverlayWindow : Window
             _particles.RemoveRange(0, particleWriteIndex + 1);
         }
 
-        if (useGpuPhysics)
-        {
-            var canReuseGpuParticleBuffer = gpuIntegratedParticleCount == particleCountBeforeUpdate
-                && _particles.Count == particleCountBeforeUpdate;
-            _gpuParticlePhysics.ScheduleUpdate(_particles, FrameDeltaSeconds, MaxDepthOffset, canReuseGpuParticleBuffer);
-        }
+        var canReuseGpuParticleBuffer = gpuIntegratedParticleCount == particleCountBeforeUpdate
+            && _particles.Count == particleCountBeforeUpdate;
+        _gpuParticlePhysics.ScheduleUpdate(_particles, FrameDeltaSeconds, MaxDepthOffset, canReuseGpuParticleBuffer);
 
         var trailWriteIndex = 0;
         for (var i = 0; i < _trails.Count; i++)
@@ -579,7 +564,7 @@ public partial class FireworkOverlayWindow : Window
         for (var i = 0; i < _activeRockets.Count; i++)
         {
             var rocket = _activeRockets[i];
-            _renderRockets.Add(new RenderRocket(rocket.X, rocket.Y, rocket.OriginX, rocket.OriginY, rocket.TrailColor, rocket.FuseHidden, rocket.EffectScale));
+            _renderRockets.Add(new RenderRocket(rocket.X, rocket.Y, rocket.OriginX, rocket.OriginY, rocket.FuseHidden, rocket.EffectScale));
         }
 
         _scene.UpdateScene(
@@ -1388,11 +1373,9 @@ public partial class FireworkOverlayWindow : Window
         return 1 - (smooth * 0.78);
     }
 
-    private void PrepareEffectStorage()
+    private void PrepareEffectStorage(bool forceStarmine)
     {
-        var starmineLaneCount = Math.Max(1, _viewModel.GetEnabledStarmineLaneCount());
-        var starmineQueuedShots = 20 * starmineLaneCount;
-        var capacityShots = Math.Max(StarmineMaxShots, starmineQueuedShots);
+        var capacityShots = forceStarmine ? 20 * _viewModel.GetEnabledStarmineLaneCount() : 1;
         var burstParticles = Math.Max(_viewModel.Settings.ParticleCount * 2, MinimumBurstPetalCount) * capacityShots;
         var burstTrailCount = burstParticles * EstimatedBurstTrailFrames;
         var totalParticleCapacity = burstParticles + (KobanaCapacityParticleCount * capacityShots);
@@ -1463,7 +1446,6 @@ public partial class FireworkOverlayWindow : Window
         public double BurstDelay { get; set; }
         public bool FuseHidden { get; set; }
         public bool FuseStarted { get; set; }
-        public WpfColor TrailColor { get; set; }
         public CurveGuideType CurveGuide { get; set; }
         public double LastTrailEmitProgress { get; set; }
         public int KobanaBurstCount { get; set; }

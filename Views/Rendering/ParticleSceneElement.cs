@@ -25,8 +25,6 @@ internal sealed class ParticleSceneElement : FrameworkElement
     private const double FuseGlowRadius = 1.75;
     private const double FuseCoreRadius = 0.625;
 
-    private static readonly WpfBrush RocketCoreBrush = CreateFrozenBrush(WpfColor.FromRgb(255, 215, 0));
-    private static readonly WpfBrush RocketGlowBrush = new RadialGradientBrush(Colors.White, Colors.Transparent);
     private static readonly WpfBrush TubeBodyBrush = CreateFrozenBrush(new LinearGradientBrush(
         new GradientStopCollection
         {
@@ -63,14 +61,6 @@ internal sealed class ParticleSceneElement : FrameworkElement
     private List<RenderRocket> _rockets = [];
     private readonly D3DParticleRenderer _particleRenderer = new();
     private bool _renderedWithGpu;
-
-    static ParticleSceneElement()
-    {
-        if (RocketGlowBrush is Freezable freezable && freezable.CanFreeze)
-        {
-            freezable.Freeze();
-        }
-    }
 
     public ParticleSceneElement()
     {
@@ -235,4 +225,4 @@ internal readonly record struct RenderParticle(
     double GlowOpacity,
     double CoreOpacity);
 
-internal readonly record struct RenderRocket(double X, double Y, double OriginX, double OriginY, WpfColor TrailColor, bool FuseHidden, double Scale);
+internal readonly record struct RenderRocket(double X, double Y, double OriginX, double OriginY, bool FuseHidden, double Scale);

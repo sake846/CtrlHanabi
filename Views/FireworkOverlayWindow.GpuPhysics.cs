@@ -505,14 +505,6 @@ public partial class FireworkOverlayWindow
 
     private sealed unsafe class D3D11DeviceContext(nint nativePointer) : ComPtr(nativePointer)
     {
-        public void UpdateBuffer<T>(D3D11Buffer buffer, ReadOnlySpan<T> values) where T : unmanaged
-        {
-            fixed (T* source = values)
-            {
-                UpdateSubresource(buffer, (nint)source, (uint)(values.Length * sizeof(T)));
-            }
-        }
-
         public void UpdateValue<T>(D3D11Buffer buffer, T value) where T : unmanaged
             => UpdateSubresource(buffer, (nint)(&value), (uint)sizeof(T));
 

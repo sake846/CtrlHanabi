@@ -157,25 +157,6 @@ internal sealed class D3DParticleRenderer : IDisposable
         }
     }
 
-    public void Clear()
-    {
-        try
-        {
-            if (_context11 is not null && _renderTargetView11 is not null)
-            {
-                _context11.SetRenderTarget(_renderTargetView11);
-                _context11.ClearRenderTarget(_renderTargetView11);
-                _context11.Flush();
-                _image.Lock();
-                _image.AddDirtyRect(new Int32Rect(0, 0, _width, _height));
-                _image.Unlock();
-            }
-        }
-        catch
-        {
-        }
-    }
-
     public void Reset()
     {
         ReleaseDirect3DResources();
