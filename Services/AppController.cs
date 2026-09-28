@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Windows;
 using System.Windows.Forms;
 using CtrlHanabi.Models;
+using CtrlHanabi.Views;
 using WpfApplication = System.Windows.Application;
 using System.Threading;
 using System.Threading.Tasks;
@@ -306,3 +307,4 @@ public sealed class AppController : IDisposable
         _overlay.Close();
     }
 }
+

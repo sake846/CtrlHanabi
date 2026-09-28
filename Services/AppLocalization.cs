@@ -27,7 +27,7 @@ public sealed class AppLocalization
     public string Menu_HourlyStarmine => _language switch
     {
         UiLanguage.English => "Launch starmine every hour",
-        _ => "毎時スターマインを打ち上げ"
+        _ => "毎時スターマインを上げる"
     };
 
     public string Menu_GpuPhysics(bool enabled) => _language switch
@@ -48,16 +48,40 @@ public sealed class AppLocalization
         _ => "終了"
     };
 
+    public string Menu_About => _language switch
+    {
+        UiLanguage.English => "About CtrlHanabi...",
+        _ => "CtrlHanabi について..."
+    };
+
     public string SettingsResetMessage => _language switch
     {
         UiLanguage.English => "Settings were reset to defaults.",
-        _ => "設定を初期値に戻しました。"
+        _ => "設定を既定値に戻しました。"
     };
 
     public string ExitConfirmMessage => _language switch
     {
         UiLanguage.English => "Exit CtrlHanabi?",
-        _ => "CtrlHanabiを終了しますか？"
+        _ => "CtrlHanabi を終了しますか？"
+    };
+
+    public string About_Title => _language switch
+    {
+        UiLanguage.English => "CtrlHanabi — About",
+        _ => "CtrlHanabi — このアプリについて"
+    };
+
+    public string About_VersionLabel => _language switch
+    {
+        UiLanguage.English => "Version",
+        _ => "バージョン"
+    };
+
+    public string About_VersionUnknown => _language switch
+    {
+        UiLanguage.English => "Unknown",
+        _ => "不明"
     };
 
     public static UiLanguage ResolveLanguage(string? configuredLanguage)
