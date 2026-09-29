@@ -227,6 +227,18 @@ public sealed class AppController : IDisposable
         // Separator
         menu.Items.Add(new ToolStripSeparator());
 
+        // About
+        var aboutItem = new ToolStripMenuItem(_localization.Menu_About);
+        aboutItem.Click += (_, _) =>
+        {
+            WpfApplication.Current.Dispatcher.Invoke(() =>
+            {
+                var win = new AboutWindow(_localization);
+                win.ShowDialog();
+            });
+        };
+        menu.Items.Add(aboutItem);
+
         // Exit
         menu.Items.Add(exitItem);
 
