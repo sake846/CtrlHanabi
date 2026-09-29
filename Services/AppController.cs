@@ -166,7 +166,7 @@ public sealed class AppController : IDisposable
         var menu = new ContextMenuStrip();
         var settings = _settingsService.Load();
 
-        // --- Group 1: Feature operations ---
+        // --- Group 1: Feature and system settings ---
         var hourlyStarmineItem = new ToolStripMenuItem(_localization.Menu_HourlyStarmine)
         {
             Checked = settings.HourlyStarmineEnabled,
@@ -190,17 +190,6 @@ public sealed class AppController : IDisposable
         menu.Items.Add(hourlyStarmineItem);
         menu.Items.Add(gpuPhysicsItem);
 
-        // Separator
-        menu.Items.Add(new ToolStripSeparator());
-
-        // --- Group 2: Behavior & System settings ---
-        var settingsItem = new ToolStripMenuItem(_localization.Menu_Settings)
-        {
-            AccessibleRole = AccessibleRole.MenuItem,
-            Font = new Font(menu.Font, System.Drawing.FontStyle.Bold)
-        };
-        settingsItem.Click += (_, _) => OpenSettings();
-
         var launchItem = new ToolStripMenuItem(_localization.Menu_RunAtStartup)
         {
             Checked = AutoStartService.IsEnabled(),
@@ -221,13 +210,18 @@ public sealed class AppController : IDisposable
             launchItem.Checked = AutoStartService.IsEnabled();
         };
 
-        menu.Items.Add(settingsItem);
         menu.Items.Add(launchItem);
 
-        // Separator
         menu.Items.Add(new ToolStripSeparator());
 
-        // --- Group 3: App operations ---
+        // --- Group 2: Settings and app information ---
+        var settingsItem = new ToolStripMenuItem(_localization.Menu_Settings)
+        {
+            AccessibleRole = AccessibleRole.MenuItem
+        };
+        settingsItem.Click += (_, _) => OpenSettings();
+        menu.Items.Add(settingsItem);
+
         var aboutItem = new ToolStripMenuItem(_localization.Menu_About)
         {
             AccessibleRole = AccessibleRole.MenuItem
@@ -241,6 +235,8 @@ public sealed class AppController : IDisposable
             });
         };
         menu.Items.Add(aboutItem);
+
+        menu.Items.Add(new ToolStripSeparator());
 
         var exitItem = new ToolStripMenuItem(_localization.Menu_Exit)
         {

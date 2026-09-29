@@ -50,9 +50,11 @@ It renders a transparent overlay to display beautiful animations from rocket asc
 
 ## System Tray Menu
 
-- **Run at Windows startup**: Automatically register the app to registry path `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
-- **Launch starmine every hour**: When enabled, automatically launches a starmine sequence from the center of the screen at `59:30` every hour.
-- **Reset settings**: Restores the configuration file to default settings.
+- **Launch hourly starmine**: When enabled, launches a starmine sequence from the center of the screen at `59:30` every hour.
+- **GPU physics**: Shows whether GPU physics is enabled.
+- **Run at Windows startup**: Registers the app at `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
+- **Settings**: Opens the settings window. Double-clicking the icon does the same.
+- **About CtrlHanabi**: Shows app information and the current version.
 - **Exit**: Closes the application.
 
 ## Build & Run
