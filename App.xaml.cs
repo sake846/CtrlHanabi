@@ -28,6 +28,15 @@ public partial class App : WpfApplication
             return;
         }
 
+        ThemeManager.ApplyTheme(Resources);
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += (s, ev) =>
+        {
+            if (ev.Category is Microsoft.Win32.UserPreferenceCategory.General or Microsoft.Win32.UserPreferenceCategory.VisualStyle)
+            {
+                Dispatcher.BeginInvoke(() => ThemeManager.ApplyTheme(Resources));
+            }
+        };
+
         _controller = new AppController();
         _controller.Start();
     }

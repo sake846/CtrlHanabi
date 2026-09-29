@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
 using CtrlHanabi.Services;
+using CtrlHanabi.ViewModels;
 
 namespace CtrlHanabi.Views;
 
@@ -12,22 +13,34 @@ public partial class AboutWindow : Window
     {
         InitializeComponent();
         Title = localization.About_Title;
-        DataContext = new AboutViewModel(localization);
+        DataContext = new AboutViewModel(localization, this);
+
+        SourceInitialized += (s, e) =>
+        {
+            ThemeManager.ApplyWindowTheme(this);
+        };
     }
 }
 
 internal class AboutViewModel
 {
     private readonly AppLocalization _localization;
+    private readonly Window _window;
 
-    public AboutViewModel(AppLocalization localization)
+    public AboutViewModel(AppLocalization localization, Window window)
     {
         _localization = localization;
-        CloseCommand = new RelayCommand(() => { /* closed via IsCancel */ });
+        _window = window;
+        CloseCommand = new RelayCommand(() => _window.Close());
         VersionText = ReadVersion(localization.About_VersionUnknown);
     }
 
-    public string Description => "Ctrl キー押下エフェクトアプリ / Ctrl key press effect app";
+    public string Description => _localization.Language switch
+    {
+        UiLanguage.English => "Ctrl key tap effect app",
+        _ => "Ctrl キー連打エフェクトアプリ"
+    };
+
     public string VersionLabel => $"{_localization.About_VersionLabel}:";
     public string VersionText { get; }
     public string CloseButtonText => "OK";
@@ -37,10 +50,14 @@ internal class AboutViewModel
     {
         try
         {
-            string? dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            if (dir == null) return fallback;
+            string? dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
+                ?? AppContext.BaseDirectory;
+
+            if (string.IsNullOrEmpty(dir)) return fallback;
+
             string file = Path.Combine(dir, "version.txt");
             if (!File.Exists(file)) return fallback;
+
             string raw = File.ReadAllText(file).Trim();
             return string.IsNullOrEmpty(raw) ? fallback : raw;
         }
@@ -49,13 +66,4 @@ internal class AboutViewModel
             return fallback;
         }
     }
-}
-
-internal class RelayCommand : ICommand
-{
-    private readonly Action _execute;
-    public RelayCommand(Action execute) => _execute = execute;
-    public event EventHandler? CanExecuteChanged { add { } remove { } }
-    public bool CanExecute(object? p) => true;
-    public void Execute(object? p) => _execute();
 }

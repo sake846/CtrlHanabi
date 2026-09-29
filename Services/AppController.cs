@@ -23,12 +23,12 @@ public sealed class AppController : IDisposable
     private readonly IExitConfirmationService _exitConfirmationService;
     private readonly KeyboardDoubleTapDetector _detector;
     private readonly FireworkOverlayWindow _overlay;
-    private readonly AppLocalization _localization;
     private readonly Icon _trayIcon;
     private readonly NotifyIcon _notifyIcon;
-    private readonly int _tapThresholdMs;
     private readonly System.Threading.Timer _hourlyStarmineTimer;
 
+    private AppLocalization _localization;
+    private int _tapThresholdMs;
     private DateTime _lastTrigger = DateTime.MinValue;
     private DateTime _lastHourlyStarmineHour = DateTime.MinValue;
     private CancellationTokenSource? _doubleTapCts;
@@ -151,6 +151,7 @@ public sealed class AppController : IDisposable
             Visible = false,
             ContextMenuStrip = BuildMenu()
         };
+        notifyIcon.DoubleClick += (_, _) => OpenSettings();
         return notifyIcon;
     }
 
@@ -165,10 +166,46 @@ public sealed class AppController : IDisposable
         var menu = new ContextMenuStrip();
         var settings = _settingsService.Load();
 
+        // --- Group 1: Feature operations ---
+        var hourlyStarmineItem = new ToolStripMenuItem(_localization.Menu_HourlyStarmine)
+        {
+            Checked = settings.HourlyStarmineEnabled,
+            CheckOnClick = true,
+            AccessibleRole = AccessibleRole.CheckButton
+        };
+        hourlyStarmineItem.Click += (_, _) =>
+        {
+            var current = _settingsService.Load();
+            _settingsService.Save(CopySettings(current, hourlyStarmineEnabled: hourlyStarmineItem.Checked));
+        };
+
+        var gpuPhysicsItem = new ToolStripMenuItem
+        {
+            Enabled = false,
+            CheckOnClick = false,
+            AccessibleRole = AccessibleRole.MenuItem
+        };
+        UpdateGpuPhysicsMenuItem(gpuPhysicsItem);
+
+        menu.Items.Add(hourlyStarmineItem);
+        menu.Items.Add(gpuPhysicsItem);
+
+        // Separator
+        menu.Items.Add(new ToolStripSeparator());
+
+        // --- Group 2: Behavior & System settings ---
+        var settingsItem = new ToolStripMenuItem(_localization.Menu_Settings)
+        {
+            AccessibleRole = AccessibleRole.MenuItem,
+            Font = new Font(menu.Font, System.Drawing.FontStyle.Bold)
+        };
+        settingsItem.Click += (_, _) => OpenSettings();
+
         var launchItem = new ToolStripMenuItem(_localization.Menu_RunAtStartup)
         {
             Checked = AutoStartService.IsEnabled(),
-            CheckOnClick = true
+            CheckOnClick = true,
+            AccessibleRole = AccessibleRole.CheckButton
         };
         launchItem.Click += (_, _) =>
         {
@@ -184,51 +221,17 @@ public sealed class AppController : IDisposable
             launchItem.Checked = AutoStartService.IsEnabled();
         };
 
-        var hourlyStarmineItem = new ToolStripMenuItem(_localization.Menu_HourlyStarmine)
-        {
-            Checked = settings.HourlyStarmineEnabled,
-            CheckOnClick = true
-        };
-        hourlyStarmineItem.Click += (_, _) =>
-        {
-            var current = _settingsService.Load();
-            _settingsService.Save(CopySettings(current, hourlyStarmineEnabled: hourlyStarmineItem.Checked));
-        };
-
-        var gpuPhysicsItem = new ToolStripMenuItem
-        {
-            Enabled = false,
-            CheckOnClick = false
-        };
-        UpdateGpuPhysicsMenuItem(gpuPhysicsItem);
-
-        var settingsItem = new ToolStripMenuItem(_localization.Menu_ResetSettings);
-        settingsItem.Click += (_, _) =>
-        {
-            _settingsService.Save(HanabiSettings.Default);
-            hourlyStarmineItem.Checked = HanabiSettings.Default.HourlyStarmineEnabled;
-            System.Windows.MessageBox.Show(_localization.SettingsResetMessage, AppName);
-        };
-
-        var exitItem = new ToolStripMenuItem(_localization.Menu_Exit);
-        exitItem.Click += (_, _) => WpfApplication.Current.Dispatcher.Invoke(RequestExit);
-
-        // Feature items
-        menu.Items.Add(hourlyStarmineItem);
-        menu.Items.Add(gpuPhysicsItem);
-
-        // Separator
-        menu.Items.Add(new ToolStripSeparator());
-
-        // System / Global settings
-        menu.Items.Add(launchItem);
         menu.Items.Add(settingsItem);
+        menu.Items.Add(launchItem);
 
         // Separator
         menu.Items.Add(new ToolStripSeparator());
 
-        // About
-        var aboutItem = new ToolStripMenuItem(_localization.Menu_About);
+        // --- Group 3: App operations ---
+        var aboutItem = new ToolStripMenuItem(_localization.Menu_About)
+        {
+            AccessibleRole = AccessibleRole.MenuItem
+        };
         aboutItem.Click += (_, _) =>
         {
             WpfApplication.Current.Dispatcher.Invoke(() =>
@@ -239,15 +242,43 @@ public sealed class AppController : IDisposable
         };
         menu.Items.Add(aboutItem);
 
-        // Exit
+        var exitItem = new ToolStripMenuItem(_localization.Menu_Exit)
+        {
+            AccessibleRole = AccessibleRole.MenuItem
+        };
+        exitItem.Click += (_, _) => WpfApplication.Current.Dispatcher.Invoke(RequestExit);
         menu.Items.Add(exitItem);
 
         menu.Opening += (_, _) =>
         {
             launchItem.Checked = AutoStartService.IsEnabled();
+            var current = _settingsService.Load();
+            hourlyStarmineItem.Checked = current.HourlyStarmineEnabled;
             UpdateGpuPhysicsMenuItem(gpuPhysicsItem);
         };
+
         return menu;
+    }
+
+    private void OpenSettings()
+    {
+        WpfApplication.Current.Dispatcher.Invoke(() =>
+        {
+            var win = new SettingsWindow(_settingsService, _localization, _overlay.IsGpuPhysicsEnabled);
+            if (win.ShowDialog() == true)
+            {
+                ApplyUpdatedSettings();
+            }
+        });
+    }
+
+    private void ApplyUpdatedSettings()
+    {
+        var settings = _settingsService.Load();
+        _tapThresholdMs = settings.DoubleTapThresholdMs;
+        _detector.ThresholdMs = settings.DoubleTapThresholdMs;
+        _localization = new AppLocalization(settings);
+        _notifyIcon.ContextMenuStrip = BuildMenu();
     }
 
     private void UpdateGpuPhysicsMenuItem(ToolStripMenuItem item)
@@ -319,4 +350,3 @@ public sealed class AppController : IDisposable
         _overlay.Close();
     }
 }
-

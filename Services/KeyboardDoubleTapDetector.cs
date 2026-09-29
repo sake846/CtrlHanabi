@@ -20,7 +20,13 @@ public sealed class KeyboardDoubleTapDetector : IDisposable
     private const int TripleTapCount = 3;
     private const int FiveTapCount = 5;
 
-    private readonly int _thresholdMs;
+    private volatile int _thresholdMs;
+
+    public int ThresholdMs
+    {
+        get => _thresholdMs;
+        set => _thresholdMs = value;
+    }
     private readonly NativeMethods.LowLevelKeyboardProc _proc;
     private readonly Lock _syncRoot = new();
     private nint _hookId;

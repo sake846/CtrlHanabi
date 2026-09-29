@@ -1,0 +1,340 @@
+<Window x:Class="CtrlHanabi.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:CtrlHanabi.ViewModels"
+        Title="{Binding Title}"
+        Width="440" MinWidth="360" MinHeight="520" MaxHeight="760"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResizeWithGrip"
+        Background="{DynamicResource Brush.Surface}"
+        Foreground="{DynamicResource Brush.Text}"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}">
+    <Window.InputBindings>
+        <KeyBinding Key="Escape" Command="{Binding CancelCommand}"/>
+        <KeyBinding Key="Return" Command="{Binding SaveCommand}"/>
+    </Window.InputBindings>
+
+    <DockPanel Background="{DynamicResource Brush.Surface}">
+        <!-- ===== Header ===== -->
+        <Border DockPanel.Dock="Top"
+                Background="{DynamicResource Brush.SurfaceAlt}"
+                BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="0,0,0,1"
+                Padding="16,12">
+            <StackPanel>
+                <TextBlock Text="CtrlHanabi" Style="{StaticResource TextStyle.Title}"/>
+                <TextBlock Text="{Binding HeaderDescription}"
+                           Style="{StaticResource TextStyle.Caption}"
+                           Margin="0,2,0,0"/>
+                <!-- Status indicator: Green circle + text label for accessibility -->
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <Ellipse Width="8" Height="8"
+                             Fill="{DynamicResource Brush.Success}"
+                             VerticalAlignment="Center"
+                             Margin="0,0,6,0"/>
+                    <TextBlock Text="{Binding StatusText}"
+                               Style="{StaticResource TextStyle.Caption}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.Text}"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== Footer ===== -->
+        <Border DockPanel.Dock="Bottom"
+                Background="{DynamicResource Brush.SurfaceAlt}"
+                BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="0,1,0,0"
+                Padding="16,10">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="{Binding CancelButtonText}"
+                        Command="{Binding CancelCommand}"
+                        Style="{StaticResource ButtonStyle.Secondary}"
+                        IsCancel="True"
+                        TabIndex="98"
+                        AutomationProperties.Name="{Binding CancelButtonText}"
+                        Margin="0,0,8,0"/>
+                <Button Content="{Binding SaveButtonText}"
+                        Command="{Binding SaveCommand}"
+                        Style="{StaticResource ButtonStyle.Primary}"
+                        IsDefault="True"
+                        TabIndex="99"
+                        AutomationProperties.Name="{Binding SaveButtonText}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== Scrollable content ===== -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      KeyboardNavigation.TabNavigation="Continue">
+            <StackPanel Margin="16,14,16,14">
+
+                <!-- Section 1: Key Input -->
+                <TextBlock Text="{Binding SectionKeyInputHeader}"
+                           Style="{StaticResource TextStyle.SectionHeader}"/>
+
+                <!-- Key actions guide card -->
+                <Border Background="{DynamicResource Brush.SurfaceAlt}"
+                        BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusControl}"
+                        Padding="12,8"
+                        Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding DoubleTapActionText}"
+                                   Style="{StaticResource TextStyle.Caption}"
+                                   Foreground="{DynamicResource Brush.Text}"
+                                   Margin="0,0,0,2"/>
+                        <TextBlock Text="{Binding TripleTapActionText}"
+                                   Style="{StaticResource TextStyle.Caption}"
+                                   Foreground="{DynamicResource Brush.Text}"
+                                   Margin="0,0,0,2"/>
+                        <TextBlock Text="{Binding FiveTapActionText}"
+                                   Style="{StaticResource TextStyle.Caption}"
+                                   Foreground="{DynamicResource Brush.Text}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Double-tap threshold -->
+                <Grid Margin="0,0,0,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding DoubleTapThresholdLabel}"
+                               Style="{StaticResource TextStyle.Body}"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding DoubleTapThresholdMs, StringFormat={}{0} ms}"
+                               Style="{StaticResource TextStyle.Body}"
+                               Foreground="{DynamicResource Brush.TextMuted}"/>
+                </Grid>
+                <Slider Minimum="100" Maximum="600"
+                        SmallChange="10" LargeChange="50"
+                        Value="{Binding DoubleTapThresholdMs, Mode=TwoWay}"
+                        TabIndex="1"
+                        AutomationProperties.Name="{Binding DoubleTapThresholdLabel}"
+                        Margin="0,2,0,2"/>
+                <TextBlock Text="{Binding DoubleTapThresholdHelp}"
+                           Style="{StaticResource TextStyle.Caption}"
+                           Margin="0,0,0,12"/>
+
+                <!-- Cooldown -->
+                <Grid Margin="0,0,0,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding CooldownLabel}"
+                               Style="{StaticResource TextStyle.Body}"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding CooldownMs, StringFormat={}{0} ms}"
+                               Style="{StaticResource TextStyle.Body}"
+                               Foreground="{DynamicResource Brush.TextMuted}"/>
+                </Grid>
+                <Slider Minimum="0" Maximum="2000"
+                        SmallChange="50" LargeChange="100"
+                        Value="{Binding CooldownMs, Mode=TwoWay}"
+                        TabIndex="2"
+                        AutomationProperties.Name="{Binding CooldownLabel}"
+                        Margin="0,2,0,2"/>
+                <TextBlock Text="{Binding CooldownHelp}"
+                           Style="{StaticResource TextStyle.Caption}"
+                           Margin="0,0,0,16"/>
+
+                <Separator Margin="0,0,0,16" Background="{DynamicResource Brush.Border}"/>
+
+                <!-- Section 2: Fireworks Effects -->
+                <TextBlock Text="{Binding SectionEffectsHeader}"
+                           Style="{StaticResource TextStyle.SectionHeader}"/>
+
+                <!-- Particle count -->
+                <Grid Margin="0,0,0,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding ParticleCountLabel}"
+                               Style="{StaticResource TextStyle.Body}"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding ParticleCount}"
+                               Style="{StaticResource TextStyle.Body}"
+                               Foreground="{DynamicResource Brush.TextMuted}"/>
+                </Grid>
+                <Slider Minimum="20" Maximum="200"
+                        SmallChange="5" LargeChange="20"
+                        Value="{Binding ParticleCount, Mode=TwoWay}"
+                        TabIndex="3"
+                        AutomationProperties.Name="{Binding ParticleCountLabel}"
+                        Margin="0,2,0,12"/>
+
+                <!-- Explosion radius -->
+                <Grid Margin="0,0,0,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding ExplosionRadiusLabel}"
+                               Style="{StaticResource TextStyle.Body}"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding ExplosionRadius, StringFormat={}{0:F0} px}"
+                               Style="{StaticResource TextStyle.Body}"
+                               Foreground="{DynamicResource Brush.TextMuted}"/>
+                </Grid>
+                <Slider Minimum="50" Maximum="250"
+                        SmallChange="5" LargeChange="20"
+                        Value="{Binding ExplosionRadius, Mode=TwoWay}"
+                        TabIndex="4"
+                        AutomationProperties.Name="{Binding ExplosionRadiusLabel}"
+                        Margin="0,2,0,12"/>
+
+                <!-- GPU physics -->
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding GpuPhysicsLabel}"
+                               Style="{StaticResource TextStyle.Body}"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding GpuPhysicsStatusText}"
+                               Style="{StaticResource TextStyle.Caption}"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource Brush.TextMuted}"/>
+                </Grid>
+
+                <Separator Margin="0,0,0,16" Background="{DynamicResource Brush.Border}"/>
+
+                <!-- Section 3: Starmine -->
+                <TextBlock Text="{Binding SectionStarmineHeader}"
+                           Style="{StaticResource TextStyle.SectionHeader}"/>
+
+                <!-- Hourly starmine -->
+                <CheckBox Content="{Binding HourlyStarmineLabel}"
+                          IsChecked="{Binding HourlyStarmineEnabled, Mode=TwoWay}"
+                          Height="28"
+                          VerticalContentAlignment="Center"
+                          TabIndex="5"
+                          AutomationProperties.Name="{Binding HourlyStarmineLabel}"
+                          Margin="0,0,0,10"/>
+
+                <!-- Lanes -->
+                <TextBlock Text="{Binding StarmineLanesHeader}"
+                           Style="{StaticResource TextStyle.Body}"
+                           Margin="0,0,0,6"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <CheckBox Content="{Binding LaneLeftLabel}"
+                              IsChecked="{Binding StarmineLaneLeftEnabled, Mode=TwoWay}"
+                              Height="28"
+                              VerticalContentAlignment="Center"
+                              TabIndex="6"
+                              AutomationProperties.Name="{Binding LaneLeftLabel}"
+                              Margin="0,0,16,0"/>
+                    <CheckBox Content="{Binding LaneCenterLabel}"
+                              IsChecked="{Binding StarmineLaneCenterEnabled, Mode=TwoWay}"
+                              Height="28"
+                              VerticalContentAlignment="Center"
+                              TabIndex="7"
+                              AutomationProperties.Name="{Binding LaneCenterLabel}"
+                              Margin="0,0,16,0"/>
+                    <CheckBox Content="{Binding LaneRightLabel}"
+                              IsChecked="{Binding StarmineLaneRightEnabled, Mode=TwoWay}"
+                              Height="28"
+                              VerticalContentAlignment="Center"
+                              TabIndex="8"
+                              AutomationProperties.Name="{Binding LaneRightLabel}"/>
+                </StackPanel>
+
+                <!-- Validation message for lanes -->
+                <TextBlock Text="{Binding NoLaneErrorMessage}"
+                           Style="{StaticResource TextStyle.Error}"
+                           Visibility="{Binding NoLaneErrorVisible}"
+                           AutomationProperties.LiveSetting="Polite"
+                           AutomationProperties.Name="{Binding NoLaneErrorMessage}"
+                           Margin="0,0,0,8"/>
+
+                <!-- Target display -->
+                <TextBlock Text="{Binding TargetDisplayHeader}"
+                           Style="{StaticResource TextStyle.Body}"
+                           Margin="0,6,0,4"/>
+                <ComboBox ItemsSource="{Binding Displays}"
+                          SelectedItem="{Binding SelectedDisplay, Mode=TwoWay}"
+                          DisplayMemberPath="DisplayName"
+                          Height="32"
+                          VerticalContentAlignment="Center"
+                          TabIndex="9"
+                          AutomationProperties.Name="{Binding TargetDisplayHeader}"
+                          Margin="0,0,0,16"/>
+
+                <Separator Margin="0,0,0,16" Background="{DynamicResource Brush.Border}"/>
+
+                <!-- Section 4: System -->
+                <TextBlock Text="{Binding SectionSystemHeader}"
+                           Style="{StaticResource TextStyle.SectionHeader}"/>
+
+                <!-- Startup -->
+                <CheckBox Content="{Binding RunAtStartupLabel}"
+                          IsChecked="{Binding RunAtStartup, Mode=TwoWay}"
+                          Height="28"
+                          VerticalContentAlignment="Center"
+                          TabIndex="10"
+                          AutomationProperties.Name="{Binding RunAtStartupLabel}"
+                          Margin="0,0,0,10"/>
+
+                <!-- Language -->
+                <TextBlock Text="{Binding LanguageHeader}"
+                           Style="{StaticResource TextStyle.Body}"
+                           Margin="0,0,0,4"/>
+                <ComboBox ItemsSource="{Binding LanguageOptions}"
+                          SelectedItem="{Binding SelectedLanguage, Mode=TwoWay}"
+                          DisplayMemberPath="DisplayText"
+                          Height="32"
+                          VerticalContentAlignment="Center"
+                          TabIndex="11"
+                          AutomationProperties.Name="{Binding LanguageHeader}"
+                          Margin="0,0,0,16"/>
+
+                <Separator Margin="0,0,0,16" Background="{DynamicResource Brush.Border}"/>
+
+                <!-- Section 5: About this app -->
+                <TextBlock Text="{Binding SectionAboutHeader}"
+                           Style="{StaticResource TextStyle.SectionHeader}"/>
+                <Grid Margin="0,4,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="CtrlHanabi"
+                               Style="{StaticResource TextStyle.Body}"/>
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding VersionText}"
+                               Style="{StaticResource TextStyle.Body}"
+                               Foreground="{DynamicResource Brush.TextMuted}"/>
+                </Grid>
+
+                <Separator Margin="0,0,0,16" Background="{DynamicResource Brush.Border}"/>
+
+                <!-- Section 6: Reset settings -->
+                <TextBlock Text="{Binding SectionDangerHeader}"
+                           Style="{StaticResource TextStyle.SectionHeader}"/>
+                <Button Content="{Binding ResetButtonText}"
+                        Command="{Binding ResetCommand}"
+                        Style="{StaticResource ButtonStyle.Secondary}"
+                        HorizontalAlignment="Left"
+                        TabIndex="12"
+                        AutomationProperties.Name="{Binding ResetButtonText}"
+                        Margin="0,2,0,0"/>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
