@@ -32,7 +32,7 @@ internal class AboutViewModel
         _localization = localization;
         _window = window;
         CloseCommand = new RelayCommand(() => _window.Close());
-        VersionText = ReadVersion(localization.About_VersionUnknown);
+        VersionText = AppVersionProvider.GetVersion(localization.About_VersionUnknown);
     }
 
     public string Description => _localization.Language switch
@@ -45,25 +45,4 @@ internal class AboutViewModel
     public string VersionText { get; }
     public string CloseButtonText => "OK";
     public ICommand CloseCommand { get; }
-
-    private static string ReadVersion(string fallback)
-    {
-        try
-        {
-            string? dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
-                ?? AppContext.BaseDirectory;
-
-            if (string.IsNullOrEmpty(dir)) return fallback;
-
-            string file = Path.Combine(dir, "version.txt");
-            if (!File.Exists(file)) return fallback;
-
-            string raw = File.ReadAllText(file).Trim();
-            return string.IsNullOrEmpty(raw) ? fallback : raw;
-        }
-        catch
-        {
-            return fallback;
-        }
-    }
 }

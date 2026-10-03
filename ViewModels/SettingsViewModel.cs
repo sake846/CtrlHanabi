@@ -265,32 +265,11 @@ public sealed class SettingsViewModel : ViewModelBase
             string.Equals(l.Code, _initialSettings.UiLanguage, StringComparison.OrdinalIgnoreCase))
             ?? LanguageOptions[0];
 
-        VersionText = ReadVersion(_localization.Settings_VersionUnknown);
+        VersionText = AppVersionProvider.GetVersion(_localization.Settings_VersionUnknown);
 
         SaveCommand = new RelayCommand(Save);
         CancelCommand = new RelayCommand(Cancel);
         ResetCommand = new RelayCommand(ResetToDefaults);
-    }
-
-    private static string ReadVersion(string fallback)
-    {
-        try
-        {
-            string? dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
-                ?? AppContext.BaseDirectory;
-
-            if (string.IsNullOrEmpty(dir)) return fallback;
-
-            string file = Path.Combine(dir, "version.txt");
-            if (!File.Exists(file)) return fallback;
-
-            string raw = File.ReadAllText(file).Trim();
-            return string.IsNullOrEmpty(raw) ? fallback : raw;
-        }
-        catch
-        {
-            return fallback;
-        }
     }
 
     private void Save()
